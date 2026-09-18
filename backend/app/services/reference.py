@@ -7,12 +7,50 @@ from pathlib import Path
 from app.core.settings import get_settings
 from app.prompts.ingestion import INGESTION_SYSTEM_PROMPT, build_ingestion_prompt
 from app.schemas.ingestion import ClassificationResponse
-from app.services.ingestion import MAX_UPLOAD_BYTES, VISION_RENDER_DPI, _render_pdf_pages_for_vision
+from app.services.ingestion import MAX_UPLOAD_BYTES, IngestionError, _render_pdf_pages_for_vision, extract_source
 from app.services.openrouter import OpenRouterClient, OpenRouterError
 
 
 SUPPORTED_IMAGE_TYPES = {"image/png", "image/jpeg", "image/webp", "image/jpg"}
-SUPPORTED_DOC_TYPES = {"application/pdf", "application/vnd.openxmlformats-officedocument.wordprocessingml.document"}
+PDF_CONTENT_TYPES = {"application/pdf", "application/x-pdf"}
+DOCX_CONTENT_TYPES = {
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/vnd.ms-word.document.12",
+}
+
+
+def _is_pdf(filename: str, content_type: str | None) -> bool:
+    return Path(filename).suffix.lower() == ".pdf" or (content_type or "").lower() in PDF_CONTENT_TYPES
+
+
+def _is_docx(filename: str, content_type: str | None) -> bool:
+    return Path(filename).suffix.lower() == ".docx" or (content_type or "").lower() in DOCX_CONTENT_TYPES
+
+
+def _extract_document_text(filename: str, content_type: str | None, content: bytes) -> str:
+    """Extract selectable document text through the shared ingestion path."""
+    normalized_content_type = content_type
+    if _is_pdf(filename, content_type):
+        normalized_content_type = "application/pdf"
+    elif _is_docx(filename, content_type):
+        normalized_content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    try:
+        source = extract_source(
+            filename=filename,
+            content_type=normalized_content_type,
+            content=content,
+            source_text="",
+            # Scanned PDFs are attached as page images below, so avoid slow OCR here.
+            use_vision=True,
+        )
+    except IngestionError:
+        return ""
+
+    return "\n\n".join(
+        f"[Source page {page}]\n{text}" if page else text
+        for page, text in source.pages
+        if text.strip()
+    ).strip()
 
 
 def _image_to_base64(content: bytes, content_type: str | None) -> str:
@@ -63,7 +101,7 @@ def _encode_images_for_llm(
         # We embed mime by returning data URL directly
         return [f"data:{mime};base64,{b64}"], [mime]
 
-    if suffix == ".pdf" or ctype == "application/pdf":
+    if _is_pdf(filename, content_type):
         try:
             pages = _render_pdf_pages_for_vision(content)
         except Exception as error:
@@ -95,7 +133,8 @@ async def extract_reference_questions(
     suffix = Path(filename).suffix.lower()
     ctype = (content_type or "").lower()
 
-    # Fast path: image or PDF -> vision
+    # Images are vision-only. Documents also use the shared text extractor so
+    # normal PDFs and DOCX files retain their text, tables, and page labels.
     images: list[str] = []
     text_chunk: str | None = None
 
@@ -103,23 +142,18 @@ async def extract_reference_questions(
         images, _ = _encode_images_for_llm(filename, content_type, content)
         # No text extraction needed; LLM will read image
         text_chunk = f"The attached image is the reference question paper '{filename}'. Extract every clearly readable question. Custom instruction: {custom_instruction or 'None'}"
-    elif suffix == ".pdf" or ctype == "application/pdf":
-        # Try vision render + text fallback
+    elif _is_pdf(filename, content_type):
+        document_text = _extract_document_text(filename, content_type, content)
         images, _ = _encode_images_for_llm(filename, content_type, content)
-        # Also provide text hint if available via quick extract (optional)
-        text_chunk = f"The attached images are pages of reference paper '{filename}'. Extract every clearly readable question from all pages. Custom instruction: {custom_instruction or 'None'}"
-    elif suffix == ".docx" or ctype == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
-        # DOCX -> text extraction via ingestion helper
-        from docx import Document
-
-        document = Document(io.BytesIO(content))
-        parts = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
-        for table in document.tables:
-            parts.extend(cell.text.strip() for row in table.rows for cell in row.cells if cell.text.strip())
-        text = "\n".join(parts).strip()
-        if not text:
+        text_chunk = (
+            f"The attached images are pages of reference paper '{filename}'. Extract every clearly readable question from all pages. "
+            f"Use the selectable text below to resolve notation and page order when available. Custom instruction: {custom_instruction or 'None'}\n\n"
+            f"{document_text}"
+        )
+    elif _is_docx(filename, content_type):
+        text_chunk = _extract_document_text(filename, content_type, content)
+        if not text_chunk:
             raise OpenRouterError("This DOCX contains no readable text.")
-        text_chunk = text
         images = []
     else:
         raise OpenRouterError("Supported uploads for reference mode are PNG, JPEG, WEBP, PDF and DOCX.")
@@ -143,15 +177,9 @@ async def extract_reference_questions(
     source_name = filename or "reference-paper"
     conversion_note = (custom_instruction or "").strip() or "Extract reference questions as-is for structural variation. Auto-detect JEE/NEET, subject, chapter, topic."
 
-    # For image/PDF vision, the text_chunk is just instruction; for docx it's actual text
-    if images:
-        user_prompt = build_ingestion_prompt(
-            source_name=source_name, conversion_note=conversion_note, source_text=text_chunk or ""
-        )
-    else:
-        user_prompt = build_ingestion_prompt(
-            source_name=source_name, conversion_note=conversion_note, source_text=text_chunk or ""
-        )
+    user_prompt = build_ingestion_prompt(
+        source_name=source_name, conversion_note=conversion_note, source_text=text_chunk or ""
+    )
 
     last_error: Exception | None = None
     for attempt_model in models_to_try:

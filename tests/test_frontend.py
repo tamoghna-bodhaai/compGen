@@ -64,6 +64,8 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("custom_instruction", source)
         self.assertIn("View seeds & compare", source)
         self.assertIn("Surface wording overlap", source)
+        self.assertIn("View partial paper", source)
+        self.assertIn("Completed questions are ready to review.", source)
         self.assertIn("/questions/${questionId}/seeds", (FRONTEND / "src/lib/api.ts").read_text())
 
     def test_accessibility_and_responsive_contracts_are_present(self) -> None:
