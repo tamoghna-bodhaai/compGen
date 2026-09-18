@@ -74,7 +74,9 @@ class DocumentRendererTests(unittest.TestCase):
         question_xml = question_document._element.xml
         question_table_text = "\n".join(cell.text for table in question_document.tables for row in table.rows for cell in row.cells)
         answers_text = "\n".join(paragraph.text for paragraph in Document(answers_path).paragraphs)
-        self.assertIn("Candidate Name", question_table_text)
+        self.assertNotIn("Candidate Name", question_table_text)
+        self.assertNotIn("Roll Number", question_table_text)
+        self.assertNotIn("JEE Main  |  Mathematics", "\n".join(paragraph.text for paragraph in question_document.paragraphs))
         self.assertIn("<m:oMath>", question_xml)
         self.assertIn("<m:sSubSup>", question_xml)
         self.assertIn("<m:t>∫</m:t>", question_xml)
@@ -111,6 +113,23 @@ class DocumentRendererTests(unittest.TestCase):
         self.assertNotIn("\x00", rendered)
         self.assertNotIn("\x08", rendered)
         self.assertNotIn("\x0b", rendered)
+
+    def test_custom_layout_is_emitted_for_docx_and_pdf_source(self) -> None:
+        paper = PaperService().get(self.paper["id"])
+        paper["branding_config"]["layout"] = {
+            "preset": "watermarked", "header_left": "Marks : 4", "header_center": "INTEGRALS TEST",
+            "header_right": "Time : 60 min", "footer_center": "Apex practice", "watermark_enabled": True,
+            "watermark_opacity": 16, "watermark_rotation": 315, "divider_enabled": True,
+        }
+        renderer = PaperDocumentRenderer(Path(self.tmp.name) / "exports")
+        path, _ = renderer.export(paper, output_format=ExportFormat.DOCX, variant=ExportVariant.QUESTION_PAPER)
+        document = Document(path)
+        xml = document.sections[0].header._element.xml
+        source = renderer._latex_source(paper, ExportVariant.QUESTION_PAPER)
+        self.assertIn("INTEGRALS TEST", xml)
+        self.assertIn("APEX CONFIDENTIAL", xml)
+        self.assertIn(r"\fancyhead[L]", source)
+        self.assertIn(r"\SetWatermarkText{APEX CONFIDENTIAL}", source)
 
 
 if __name__ == "__main__":

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import json
+import re
 from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -76,6 +77,39 @@ def _repair_latex_controls(value: str) -> str:
     )
 
 
+def parse_model_json(content: str) -> dict[str, Any]:
+    """Parse JSON even when a provider adds a fence or a short preamble.
+
+    Some OpenRouter providers return otherwise-valid structured output wrapped
+    in Markdown or reasoning text despite ``response_format``.  We only accept
+    a complete JSON object and never attempt to interpret prose as data.
+    """
+    candidates = [content.strip()]
+    candidates.extend(match.group(1).strip() for match in re.finditer(r"```(?:json)?\\s*(.*?)```", content, re.IGNORECASE | re.DOTALL))
+    decoder = json.JSONDecoder()
+    for candidate in candidates:
+        try:
+            value = json.loads(candidate)
+        except json.JSONDecodeError:
+            start = candidate.find("{")
+            if start < 0:
+                continue
+            try:
+                value, _ = decoder.raw_decode(candidate[start:])
+            except json.JSONDecodeError:
+                # Models often write LaTeX as ``\left`` or ``\cdot`` instead
+                # of JSON-safe ``\\left``/``\\cdot``.  Escape those command
+                # prefixes only after normal JSON parsing has failed.
+                repaired_candidate = re.sub(r"\\(?=[A-Za-z])", r"\\\\", candidate[start:])
+                try:
+                    value, _ = decoder.raw_decode(repaired_candidate)
+                except json.JSONDecodeError:
+                    continue
+        if isinstance(value, dict):
+            return repair_decoded_latex_escapes(value)
+    raise OpenRouterError("OpenRouter returned invalid JSON; the classification model did not produce a complete JSON object.")
+
+
 class OpenRouterClient:
     def __init__(self, settings: Settings) -> None:
         self.settings = settings
@@ -129,10 +163,7 @@ class OpenRouterClient:
             content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
         if not isinstance(content, str):
             raise OpenRouterError("OpenRouter returned a non-text structured response.")
-        try:
-            return repair_decoded_latex_escapes(json.loads(content.removeprefix("```json").removesuffix("```").strip()))
-        except json.JSONDecodeError as error:
-            raise OpenRouterError("OpenRouter did not return valid JSON.") from error
+        return parse_model_json(content)
 
     def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
         request = Request(

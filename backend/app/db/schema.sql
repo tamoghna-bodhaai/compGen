@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS papers (
   subject TEXT,
   generation_config JSONB NOT NULL DEFAULT '{}'::jsonb,
   branding_config JSONB NOT NULL DEFAULT '{}'::jsonb,
+  branding_template_id UUID,
   template_id UUID,
   status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'generated', 'final')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

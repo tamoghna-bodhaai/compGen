@@ -43,6 +43,7 @@ class Settings:
     validation_burst_concurrency: int = 10
     deterministic_validation_concurrency: int = 25
     classification_fallback_model: str | None = None
+    classification_use_vision: bool = False
 
     @property
     def generation_ready(self) -> bool:
@@ -56,6 +57,7 @@ def get_settings() -> Settings:
         validation_model=os.getenv("VALIDATION_MODEL") or None,
         classification_model=os.getenv("CLASSIFICATION_MODEL") or None,
         classification_fallback_model=os.getenv("CLASSIFICATION_FALLBACK_MODEL") or None,
+        classification_use_vision=os.getenv("CLASSIFICATION_USE_VISION", "false").lower() in {"1", "true", "yes", "on"},
         embedding_model=os.getenv("EMBEDDING_MODEL") or None,
         max_concurrent_generations=int(os.getenv("MAX_CONCURRENT_GENERATIONS", "3")),
         max_generation_attempts=int(os.getenv("MAX_GENERATION_ATTEMPTS", "3")),

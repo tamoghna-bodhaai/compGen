@@ -38,6 +38,8 @@ export const defaultCreation = (): CreationState => ({
   plans: {},
   generation_mode: "structural_variation",
   variation_strength: "balanced",
+  total_marks: 100,
+  duration_minutes: 180,
 });
 
 export function catalogRows(rows: CatalogRow[], filters: Partial<Record<keyof CatalogRow, string[]>>) {
@@ -59,7 +61,7 @@ export function buildCreationPayload(creation: CreationState) {
     const plan = creation.plans[key] || defaultPlan();
     return {
       topic,
-      subtopic,
+      ...(subtopic ? { subtopic } : {}),
       chapters: creation.chapters,
       section_title: plan.sectionTitle.trim() || `${topic} › ${subtopic}`,
       question_types: QUESTION_TYPES.map(([type]) => ({ type, count: Number(plan.questionCounts[type]) || 0 })).filter((item) => item.count > 0),
@@ -74,13 +76,17 @@ export function buildCreationPayload(creation: CreationState) {
     for (const item of plan.question_types) typeTotals.set(item.type, (typeTotals.get(item.type) || 0) + item.count);
     for (const item of plan.difficulty_distribution) difficultyTotals.set(item.difficulty, (difficultyTotals.get(item.difficulty) || 0) + item.count);
   }
+  // Older API deployments require subtopic_plans[].subtopic even though a
+  // topic-only seed bank is valid. A single topic-only selection can use the
+  // original top-level request shape, which both API versions understand.
+  const usesTopicOnlyRequest = subtopic_plans.length === 1 && !subtopic_plans[0].subtopic;
   return {
     title: creation.title.trim(), exam: creation.exam, subject: creation.subject, chapters: creation.chapters,
     topics: [...new Set(subtopic_plans.map((item) => item.topic).filter(Boolean))],
     subtopics: [...new Set(subtopic_plans.map((item) => item.subtopic).filter(Boolean))], concepts: [],
     question_types: [...typeTotals.entries()].map(([type, count]) => ({ type, count })),
     difficulty_distribution: [...difficultyTotals.entries()].map(([difficulty, count]) => ({ difficulty, count })),
-    generation_mode: creation.generation_mode, variation_strength: creation.variation_strength, subtopic_plans,
+    generation_mode: creation.generation_mode, variation_strength: creation.variation_strength, subtopic_plans, usesTopicOnlyRequest,
   };
 }
 

@@ -25,10 +25,16 @@ class PaperCreateRequest(GenerationRequest):
 class PaperUpdateRequest(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=160)
     branding_config: dict[str, Any] | None = None
+    branding_template_id: str | None = None
     status: str | None = Field(default=None, pattern="^(draft|generated|final)$")
 
 
 class BrandingProfileRequest(BaseModel):
+    name: str = Field(min_length=1, max_length=120)
+    branding_config: dict[str, Any]
+
+
+class BrandingProfileUpdateRequest(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     branding_config: dict[str, Any]
 
@@ -100,3 +106,5 @@ class RegenerateSelectedRequest(BaseModel):
 class PaperExportRequest(BaseModel):
     format: ExportFormat = ExportFormat.DOCX
     variant: ExportVariant = ExportVariant.QUESTION_PAPER
+    branding_template_id: str | None = None
+    branding_overrides: dict[str, Any] | None = None

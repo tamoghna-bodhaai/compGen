@@ -11,7 +11,8 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR / "backend"))
 
 from app.api.questions import list_questions
-from app.services.ingestion import MAX_UPLOAD_BYTES, IngestionError, QuestionIngestionService, _best_pdf_pages, extract_source
+from app.services.openrouter import ModelConfigurationError
+from app.services.ingestion import MAX_CHUNK_CHARACTERS, MAX_UPLOAD_BYTES, IngestionError, QuestionIngestionService, _best_pdf_pages, chunk_source, extract_source
 
 
 CLASSIFIED_RESPONSE = {
@@ -80,6 +81,16 @@ class QuestionIngestionTests(unittest.IsolatedAsyncioTestCase):
         with self.assertRaisesRegex(IngestionError, "35 MB"):
             extract_source(filename="questions.pdf", content_type="application/pdf", content=b"x" * (MAX_UPLOAD_BYTES + 1), source_text="")
 
+    def test_text_source_is_limited_to_safe_classification_chunks(self) -> None:
+        source = extract_source(filename="large.txt", content_type="text/plain", content=b"", source_text="x" * (MAX_CHUNK_CHARACTERS * 2 + 1))
+        chunks = chunk_source(source)
+        self.assertEqual([len(chunk) for chunk in chunks], [MAX_CHUNK_CHARACTERS, MAX_CHUNK_CHARACTERS, 2])
+
+    def test_configuration_is_checked_before_a_job_is_accepted(self) -> None:
+        with patch.dict(os.environ, {"OPENROUTER_API_KEY": "", "CLASSIFICATION_MODEL": "", "GENERATION_MODEL": ""}, clear=False):
+            with self.assertRaises(ModelConfigurationError):
+                QuestionIngestionService.ensure_configuration()
+
     async def test_ingestion_job_persists_progress_and_completion(self) -> None:
         service = QuestionIngestionService()
         job = service.create_job("practice.txt")
@@ -92,6 +103,18 @@ class QuestionIngestionTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(completed["completed_chunks"], 1)
         self.assertEqual(completed["ingested_questions"], 1)
 
+    def test_completed_ingestion_update_can_be_deleted_but_active_one_cannot(self) -> None:
+        service = QuestionIngestionService()
+        completed = service.create_job("completed.txt")
+        service._update_job(completed["id"], state="failed", phase="failed", finished=True)
+        service.delete_job(completed["id"])
+        with self.assertRaisesRegex(IngestionError, "not found"):
+            service.get_job(completed["id"])
+
+        active = service.create_job("active.txt")
+        with self.assertRaisesRegex(IngestionError, "active"):
+            service.delete_job(active["id"])
+
     def test_scanned_pdf_uses_ocr_after_both_text_extractors_are_empty(self) -> None:
         with (
             patch("app.services.ingestion._extract_pdf_with_pypdf", return_value=[(1, "")]),
@@ -102,3 +125,25 @@ class QuestionIngestionTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(pages, [(1, "1. OCR question text")])
         ocr.assert_called_once_with(b"scanned-pdf")
+
+    async def test_vision_classification_bypasses_local_ocr_for_image_only_pdf(self) -> None:
+        service = QuestionIngestionService()
+        with (
+            patch.dict(os.environ, {"CLASSIFICATION_USE_VISION": "true"}, clear=False),
+            patch("app.services.ingestion._extract_pdf_with_pypdf", return_value=[(1, "")]),
+            patch("app.services.ingestion._extract_pdf_with_pymupdf", return_value=[(1, "")]),
+            patch("app.services.ingestion._extract_pdf_with_ocr") as ocr,
+            patch("app.services.ingestion._render_pdf_pages_for_vision", return_value=[(1, "page-image")]),
+            patch("app.services.ingestion.OpenRouterClient.call_llm", new=AsyncMock(return_value=CLASSIFIED_RESPONSE)) as call,
+        ):
+            result = await service.ingest(
+                filename="image-only.pdf",
+                content_type="application/pdf",
+                content=b"image-only-pdf",
+                source_text="",
+                conversion_note="",
+            )
+
+        self.assertEqual(result["questions"], 1)
+        ocr.assert_not_called()
+        self.assertEqual(call.await_args.kwargs["images"], ["page-image"])

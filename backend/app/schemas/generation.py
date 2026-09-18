@@ -35,7 +35,10 @@ class DifficultyCount(BaseModel):
 
 class SubtopicPlanItem(BaseModel):
     topic: str = Field(min_length=1)
-    subtopic: str = Field(min_length=1)
+    # Some imported collections are organized only to topic level.  Treat an
+    # omitted subtopic as a valid topic-level plan instead of rejecting a
+    # usable seed bank at request validation time.
+    subtopic: str | None = Field(default=None, min_length=1)
     chapters: list[str] = Field(default_factory=list)
     section_title: str | None = Field(default=None, max_length=120)
     question_types: list[QuestionTypeCount]
@@ -60,7 +63,7 @@ class SubtopicPlanItem(BaseModel):
     def resolved_section_title(self) -> str:
         if self.section_title and self.section_title.strip():
             return self.section_title.strip()[:120]
-        return f"{self.topic} › {self.subtopic}"[:120]
+        return (f"{self.topic} › {self.subtopic}" if self.subtopic else self.topic)[:120]
 
 
 class GenerationSlot(BaseModel):

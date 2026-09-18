@@ -6,7 +6,7 @@ import uuid
 from datetime import UTC, datetime
 from typing import Any, ClassVar
 
-from app.db.database import get_connection
+from app.db.database import decode_question_row, get_connection
 from app.schemas.generation import GeneratedSlotResult, GenerationRequest, GenerationSlot
 from app.schemas.papers import AddManualQuestionRequest, PaperCreateRequest, PaperQuestionInput, PaperUpdateRequest, QuestionEditRequest
 from app.services.generation import GenerationService
@@ -87,8 +87,8 @@ class PaperService:
         now = _now()
         with get_connection() as connection:
             connection.execute(
-                "INSERT INTO papers (id, title, exam, subject, generation_config, branding_config, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (paper_id, request.title, request.exam, request.subject, request.model_dump_json(), "{}", "draft", now, now),
+                "INSERT INTO papers (id, title, exam, subject, generation_config, branding_config, branding_template_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (paper_id, request.title, request.exam, request.subject, request.model_dump_json(), "{}", None, "draft", now, now),
             )
         if request.subtopic_plans:
             self._ensure_plan_sections(paper_id, request)
@@ -121,6 +121,8 @@ class PaperService:
 
     def update(self, paper_id: str, request: PaperUpdateRequest) -> dict:
         updates = request.model_dump(exclude_none=True)
+        if "branding_template_id" in request.model_fields_set:
+            updates["branding_template_id"] = request.branding_template_id
         if not updates:
             return self.get(paper_id)
         now = _now()
@@ -239,6 +241,32 @@ class PaperService:
         with get_connection() as connection:
             connection.execute("DELETE FROM paper_questions WHERE id = ?", (question_id,))
         return self.get(paper_id)
+
+    def get_question_seeds(self, paper_id: str, question_id: str) -> dict:
+        """Return the current seed-bank records used to create one question.
+
+        Seed IDs are stored with the generated question, rather than copied, so
+        review always reflects the current canonical seed bank.
+        """
+        question = self._ensure_question(paper_id, question_id)
+        metadata = question.get("generation_metadata") or {}
+        seed_ids = metadata.get("seed_question_ids")
+        if metadata.get("origin") != "generated" or not isinstance(seed_ids, list) or not seed_ids:
+            raise PaperConflictError("This question was not generated from recorded seed questions.")
+
+        ordered_ids = [seed_id for seed_id in seed_ids if isinstance(seed_id, str) and seed_id]
+        if not ordered_ids:
+            raise PaperConflictError("This question has no usable recorded seed questions.")
+        placeholders = ", ".join("?" for _ in ordered_ids)
+        with get_connection() as connection:
+            rows = connection.execute(f"SELECT * FROM questions WHERE id IN ({placeholders})", ordered_ids).fetchall()
+        by_id = {row["id"]: decode_question_row(row) for row in rows}
+        return {
+            "question": question,
+            "generation_metadata": metadata,
+            "seeds": [by_id[seed_id] for seed_id in ordered_ids if seed_id in by_id],
+            "missing_seed_question_ids": [seed_id for seed_id in ordered_ids if seed_id not in by_id],
+        }
 
     async def generate_initial(self, paper_id: str, generation_service: GenerationService | None = None) -> dict:
         paper = self.get(paper_id)

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import base64
 import re
 import uuid
 from dataclasses import dataclass
@@ -20,9 +21,12 @@ from app.services.openrouter import ModelConfigurationError, OpenRouterClient, O
 from app.services.seed_import import upsert_questions
 
 MAX_UPLOAD_BYTES = 35 * 1024 * 1024
-MAX_CHUNK_CHARACTERS = 28_000
+# A classified question includes substantial metadata, so a 28k-character
+# source chunk can exceed a provider's 8k output limit before its JSON closes.
+MAX_CHUNK_CHARACTERS = 7_000
 OCR_RENDER_DPI = 300
 OCR_TIMEOUT_SECONDS = 30
+VISION_RENDER_DPI = 120
 
 
 class IngestionError(RuntimeError):
@@ -37,6 +41,7 @@ def _now() -> str:
 class ExtractedSource:
     name: str
     pages: list[tuple[int | None, str]]
+    vision_pages: list[tuple[int, str]] | None = None
 
 
 def _extract_pdf_with_pypdf(content: bytes) -> list[tuple[int | None, str]]:
@@ -54,6 +59,21 @@ def _extract_pdf_with_pymupdf(content: bytes) -> list[tuple[int | None, str]]:
         return [(number, (page.get_text() or "").strip()) for number, page in enumerate(doc, 1)]
     finally:
         doc.close()
+
+
+def _render_pdf_pages_for_vision(content: bytes) -> list[tuple[int, str]]:
+    """Render each PDF page as a compact PNG for a vision-capable classifier."""
+    import fitz  # PyMuPDF
+
+    scale = VISION_RENDER_DPI / 72
+    document = fitz.open(stream=content, filetype="pdf")
+    try:
+        return [
+            (number, base64.b64encode(page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False).tobytes("png")).decode("ascii"))
+            for number, page in enumerate(document, 1)
+        ]
+    finally:
+        document.close()
 
 
 def _extract_pdf_with_ocr(content: bytes) -> list[tuple[int | None, str]]:
@@ -86,7 +106,7 @@ def _extract_pdf_with_ocr(content: bytes) -> list[tuple[int | None, str]]:
         document.close()
 
 
-def _best_pdf_pages(content: bytes) -> list[tuple[int | None, str]]:
+def _best_pdf_pages(content: bytes, *, include_ocr: bool = True) -> list[tuple[int | None, str]]:
     """Extract PDF pages with pypdf first, falling back to PyMuPDF when text is sparse.
 
     Many digital PDFs use CID fonts or XObjects that pypdf renders as empty
@@ -142,6 +162,9 @@ def _best_pdf_pages(content: bytes) -> list[tuple[int | None, str]]:
     if any(text for _, text in selected_pages):
         return selected_pages
 
+    if not include_ocr:
+        return selected_pages
+
     # Scanned PDFs have no embedded text layer. OCR is intentionally the last
     # fallback: it is slower and less exact for mathematical notation, but it
     # makes otherwise unreadable question sets available for teacher review.
@@ -152,7 +175,9 @@ def _best_pdf_pages(content: bytes) -> list[tuple[int | None, str]]:
     return ocr_pages if any(text for _, text in ocr_pages) else selected_pages
 
 
-def extract_source(*, filename: str, content_type: str | None, content: bytes, source_text: str) -> ExtractedSource:
+def extract_source(
+    *, filename: str, content_type: str | None, content: bytes, source_text: str, use_vision: bool = False
+) -> ExtractedSource:
     if source_text.strip():
         return ExtractedSource(filename or "pasted-question.txt", [(None, source_text.strip())])
     if not content:
@@ -162,7 +187,7 @@ def extract_source(*, filename: str, content_type: str | None, content: bytes, s
     suffix = Path(filename).suffix.lower()
     if suffix == ".pdf" or content_type == "application/pdf":
         try:
-            pages = _best_pdf_pages(content)
+            pages = _best_pdf_pages(content, include_ocr=not use_vision)
         except Exception as error:  # extraction libraries expose several exception types
             raise IngestionError("This PDF could not be read. Upload a text-based PDF or paste its question text.") from error
     elif suffix == ".docx" or content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
@@ -177,6 +202,13 @@ def extract_source(*, filename: str, content_type: str | None, content: bytes, s
     else:
         raise IngestionError("Supported uploads are PDF and DOCX. For a single question, paste its text.")
     pages = [(page, text) for page, text in pages if text]
+    if not pages and use_vision and (suffix == ".pdf" or content_type == "application/pdf"):
+        try:
+            vision_pages = _render_pdf_pages_for_vision(content)
+        except Exception as error:
+            raise IngestionError("This PDF could not be rendered for vision ingestion.") from error
+        if vision_pages:
+            return ExtractedSource(filename or "uploaded-source", [], vision_pages)
     if not pages:
         raise IngestionError(
             "No readable text was found in this PDF. The file may be scanned, use an unsupported font encoding, "
@@ -201,7 +233,9 @@ def chunk_source(source: ExtractedSource) -> list[str]:
                 chunks.append(buffer)
                 buffer = ""
                 continue
-            split_at = max(1, remaining.rfind("\n", 0, MAX_CHUNK_CHARACTERS))
+            split_at = remaining.rfind("\n", 0, MAX_CHUNK_CHARACTERS)
+            if split_at <= 0:
+                split_at = MAX_CHUNK_CHARACTERS
             chunks.append(remaining[:split_at])
             remaining = remaining[split_at:]
     if buffer:
@@ -210,6 +244,15 @@ def chunk_source(source: ExtractedSource) -> list[str]:
 
 
 class QuestionIngestionService:
+    @staticmethod
+    def ensure_configuration() -> None:
+        """Reject jobs that cannot start before promising that they were accepted."""
+        settings = get_settings()
+        if not settings.openrouter_api_key or not (settings.classification_model or settings.generation_model):
+            raise ModelConfigurationError(
+                "Question ingestion is not configured. Set OPENROUTER_API_KEY and CLASSIFICATION_MODEL (or GENERATION_MODEL) before ingesting."
+            )
+
     @staticmethod
     def recover_interrupted_jobs() -> None:
         """Background ingestion is process-local; surface interrupted work honestly."""
@@ -241,6 +284,16 @@ class QuestionIngestionService:
         with get_connection() as connection:
             rows = connection.execute("SELECT * FROM ingestion_jobs ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
         return [dict(row) for row in rows]
+
+    def delete_job(self, job_id: str) -> None:
+        """Remove a completed ingestion update without touching imported questions."""
+        with get_connection() as connection:
+            row = connection.execute("SELECT state FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise IngestionError("Ingestion job not found.")
+            if row["state"] in {"queued", "running"}:
+                raise IngestionError("An active ingestion update cannot be deleted.")
+            connection.execute("DELETE FROM ingestion_jobs WHERE id = ?", (job_id,))
 
     def _update_job(self, job_id: str, *, state: str | None = None, phase: str | None = None, message: str | None = None,
                     total_chunks: int | None = None, completed_chunks: int | None = None, ingested_questions: int | None = None,
@@ -281,13 +334,31 @@ class QuestionIngestionService:
         conversion_note: str,
         on_progress: Callable[[str, str, int | None, int | None], Awaitable[None] | None] | None = None,
     ) -> dict:
-        source = extract_source(filename=filename, content_type=content_type, content=content, source_text=source_text)
-        chunks = chunk_source(source)
+        settings = get_settings()
+        source = extract_source(
+            filename=filename,
+            content_type=content_type,
+            content=content,
+            source_text=source_text,
+            use_vision=settings.classification_use_vision,
+        )
+        if source.vision_pages:
+            # One page per request keeps question boundaries and page references
+            # unambiguous, and avoids overwhelming a model's image context.
+            chunks: list[tuple[str, list[str] | None]] = [
+                (
+                    f"The attached image is original source page {page_number}. "
+                    "Read and classify every clearly readable question on this page.",
+                    [image],
+                )
+                for page_number, image in source.vision_pages
+            ]
+        else:
+            chunks = [(chunk, None) for chunk in chunk_source(source)]
         if on_progress:
             notification = on_progress("classifying", f"Classifying 0 of {len(chunks)} source chunks", len(chunks), 0)
             if notification is not None:
                 await notification
-        settings = get_settings()
         primary_model = settings.classification_model or settings.generation_model
         fallback_model = settings.classification_fallback_model
         # Dedicated ingestion/classification models: primary is user-configurable
@@ -296,7 +367,7 @@ class QuestionIngestionService:
         client = OpenRouterClient(settings)
         collection_id = f"ingested-{uuid.uuid4().hex[:12]}"
         normalized: list[dict] = []
-        for chunk_number, chunk in enumerate(chunks, 1):
+        for chunk_number, (chunk, images) in enumerate(chunks, 1):
             models_to_try: list[str | None] = []
             if primary_model:
                 models_to_try.append(primary_model)
@@ -318,6 +389,7 @@ class QuestionIngestionService:
                         response_schema=ClassificationResponse.model_json_schema(),
                         temperature=0.1,
                         max_tokens=8_000,
+                        images=images,
                     )
                     classified = ClassificationResponse.model_validate(response)
                     break

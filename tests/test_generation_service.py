@@ -13,7 +13,7 @@ sys.path.insert(0, str(ROOT_DIR / "backend"))
 from app.core.settings import Settings
 from app.schemas.generation import GeneratedQuestion, GeneratedSolution, GenerationRequest
 from app.services.generation import GenerationService
-from app.services.openrouter import repair_decoded_latex_escapes, strict_json_schema
+from app.services.openrouter import parse_model_json, repair_decoded_latex_escapes, strict_json_schema
 from app.services.seed_import import upsert_seed_questions
 
 
@@ -151,6 +151,25 @@ class GenerationServiceTests(unittest.TestCase):
         self.assertEqual(slots[0].section_title, "Definite Integrals › Properties")
         self.assertEqual(slots[2].generation_mode, "concept_variation")
 
+    def test_topic_level_plan_is_valid_without_a_subtopic(self) -> None:
+        request = GenerationRequest.model_validate(
+            {
+                "title": "Topic-only paper", "exam": "JEE", "subject": "Mathematics",
+                "topics": ["Definite Integrals"],
+                "question_types": [{"type": "single_correct_mcq", "count": 1}],
+                "difficulty_distribution": [{"difficulty": 3, "count": 1}],
+                "generation_mode": "concept_variation",
+                "subtopic_plans": [{
+                    "topic": "Definite Integrals",
+                    "question_types": [{"type": "single_correct_mcq", "count": 1}],
+                    "difficulty_distribution": [{"difficulty": 3, "count": 1}],
+                }],
+            }
+        )
+        slot = request.build_slots()[0]
+        self.assertIsNone(slot.subtopic)
+        self.assertEqual(slot.section_title, "Definite Integrals")
+
     def test_strict_schema_requires_defaulted_fields(self) -> None:
         schema = strict_json_schema(GeneratedQuestion.model_json_schema())
         self.assertEqual(set(schema["required"]), set(schema["properties"]))
@@ -168,6 +187,14 @@ class GenerationServiceTests(unittest.TestCase):
             repaired["solution"],
             r"Use \frac{1}{2}, \tan x, \begin{aligned}x\right, and \sqrt{2}.",
         )
+
+    def test_parses_json_wrapped_in_provider_preamble_and_code_fence(self) -> None:
+        response = parse_model_json("I have formatted the result." + "\n" + "```JSON" + "\n" + '{"questions": []}' + "\n```")
+        self.assertEqual(response, {"questions": []})
+
+    def test_repairs_unescaped_latex_before_json_parsing(self) -> None:
+        response = parse_model_json(r'{"stem": "Evaluate \left(x \cdot y\right)"}'.replace('\\"', '"'))
+        self.assertEqual(response, {"stem": r"Evaluate \left(x \cdot y\right)"})
 
 
 if __name__ == "__main__":

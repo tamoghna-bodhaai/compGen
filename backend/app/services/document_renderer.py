@@ -516,7 +516,7 @@ def _logo_stream(branding: dict[str, Any]) -> io.BytesIO | None:
     return io.BytesIO(payload)
 
 
-def _add_watermark(paragraph: Any, text: str) -> None:
+def _add_watermark(paragraph: Any, text: str, opacity: int = 18, rotation: int = 315) -> None:
     """Add a Word-compatible, behind-text VML watermark to the header."""
     run = paragraph.add_run()
     picture = OxmlElement("w:pict")
@@ -524,7 +524,7 @@ def _add_watermark(paragraph: Any, text: str) -> None:
     shape = etree.Element(f"{{{vml_namespace}}}shape", nsmap={"v": vml_namespace})
     shape.set("id", "QuestionPaperWatermark")
     shape.set("type", "#_x0000_t136")
-    shape.set("style", "position:absolute;width:468pt;height:117pt;rotation:315;z-index:-251654144;mso-position-horizontal:center;mso-position-horizontal-relative:margin;mso-position-vertical:center;mso-position-vertical-relative:margin")
+    shape.set("style", f"position:absolute;width:468pt;height:117pt;rotation:{rotation};z-index:-251654144;mso-position-horizontal:center;mso-position-horizontal-relative:margin;mso-position-vertical:center;mso-position-vertical-relative:margin;opacity:{max(1, min(100, opacity)) / 100}")
     shape.set("fillcolor", "#d9d9d9")
     shape.set("stroked", "f")
     text_path = etree.Element(f"{{{vml_namespace}}}textpath")
@@ -605,47 +605,109 @@ class PaperDocumentRenderer:
     def _add_header_footer(doc: Document, branding: dict[str, Any]) -> None:
         section = doc.sections[0]
         section.different_first_page_header_footer = False
+        layout = branding.get("layout") if isinstance(branding.get("layout"), dict) else {}
+        # Preserve legacy saved profiles exactly; advanced templates opt into
+        # three-zone header/footer layout through the nested layout object.
+        if not layout:
+            header = section.header.paragraphs[0]
+            header.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            logo = _logo_stream(branding)
+            if logo is not None:
+                header.add_run().add_picture(logo, width=Inches(0.34))
+                header.add_run("  ")
+            header_text = str(branding.get("header_text") or branding.get("institution_name") or "").strip()
+            if header_text:
+                header.add_run(header_text).bold = True
+            contact_line = " · ".join(part for part in (str(branding.get("address") or "").strip(), str(branding.get("contact") or "").strip()) if part)
+            if contact_line:
+                line = section.header.add_paragraph(contact_line)
+                line.alignment = WD_ALIGN_PARAGRAPH.CENTER
+                for run in line.runs:
+                    run.font.size = Pt(8)
+            watermark = str(branding.get("watermark_text") or "").strip()
+            if watermark:
+                _add_watermark(header, watermark)
+            footer = section.footer.paragraphs[0]
+            footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            footer_text = str(branding.get("footer_text") or "").strip()
+            if footer_text:
+                footer.add_run(f"{footer_text}  ·  ")
+            _page_field(footer)
+            return
         header = section.header.paragraphs[0]
-        header.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        logo = _logo_stream(branding)
-        if logo is not None:
-            header.add_run().add_picture(logo, width=Inches(0.34))
-            header.add_run("  ")
-        header_text = str(branding.get("header_text") or branding.get("institution_name") or "Question Paper")
-        header.add_run(header_text).bold = True
+        header.clear()
+        if not layout.get("header_enabled", True):
+            header.text = ""
+        else:
+            table = section.header.add_table(rows=1, cols=3, width=section.page_width - section.left_margin - section.right_margin)
+            for cell in table.rows[0].cells:
+                _set_cell_borders(cell, visible=False)
+                _set_cell_padding(cell, 0)
+            header_cells = table.rows[0].cells
+            header_values = [
+                str(layout.get("header_left") or ""),
+                str(layout.get("header_center") or branding.get("header_text") or branding.get("institution_name") or ""),
+                str(layout.get("header_right") or ""),
+            ]
+            alignments = [WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.RIGHT]
+            logo_position = str(layout.get("logo_position") or "left")
+            logo = _logo_stream(branding)
+            for index, cell in enumerate(header_cells):
+                paragraph = cell.paragraphs[0]
+                paragraph.alignment = alignments[index]
+                if logo is not None and logo_position == ("left", "center", "right")[index]:
+                    paragraph.add_run().add_picture(logo, width=Inches(float(layout.get("logo_size") or 0.34)))
+                    if header_values[index]:
+                        paragraph.add_run("  ")
+                if header_values[index]:
+                    run = paragraph.add_run(header_values[index])
+                    run.bold = True
+                    run.font.size = Pt(float(layout.get("font_size") or 9.5))
+            if layout.get("divider_enabled", True):
+                divider = section.header.add_paragraph()
+                divider.paragraph_format.space_before = Pt(1)
+                PaperDocumentRenderer._set_paragraph_border(divider, str(layout.get("divider_color") or "222222"))
         contact_line = " · ".join(part for part in (str(branding.get("address") or "").strip(), str(branding.get("contact") or "").strip()) if part)
-        if contact_line:
+        if contact_line and layout.get("header_enabled", True):
             line = section.header.add_paragraph(contact_line)
             line.alignment = WD_ALIGN_PARAGRAPH.CENTER
             for run in line.runs:
                 run.font.size = Pt(8)
         watermark = str(branding.get("watermark_text") or "").strip()
-        if watermark:
-            _add_watermark(header, watermark)
+        if watermark and layout.get("watermark_enabled", True):
+            _add_watermark(header, watermark, int(layout.get("watermark_opacity") or 18), int(layout.get("watermark_rotation") or 315))
         footer = section.footer.paragraphs[0]
-        footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        footer_text = str(branding.get("footer_text") or "").strip()
-        if footer_text:
-            footer.add_run(f"{footer_text}  ·  ")
-        _page_field(footer)
+        footer.clear()
+        if layout.get("footer_enabled", True):
+            footer_table = section.footer.add_table(rows=1, cols=3, width=section.page_width - section.left_margin - section.right_margin)
+            for cell in footer_table.rows[0].cells:
+                _set_cell_borders(cell, visible=False)
+                _set_cell_padding(cell, 0)
+            values = [str(layout.get("footer_left") or ""), str(layout.get("footer_center") or branding.get("footer_text") or ""), str(layout.get("footer_right") or "")]
+            page_position = str(layout.get("page_number_position") or "center")
+            for index, cell in enumerate(footer_table.rows[0].cells):
+                paragraph = cell.paragraphs[0]
+                paragraph.alignment = (WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.RIGHT)[index]
+                if values[index]:
+                    paragraph.add_run(values[index] + ("  ·  " if page_position == ("left", "center", "right")[index] else ""))
+                if page_position == ("left", "center", "right")[index]:
+                    _page_field(paragraph)
+
+    @staticmethod
+    def _set_paragraph_border(paragraph: Any, color: str) -> None:
+        properties = paragraph._p.get_or_add_pPr()
+        borders = OxmlElement("w:pBdr")
+        bottom = OxmlElement("w:bottom")
+        bottom.set(qn("w:val"), "single")
+        bottom.set(qn("w:sz"), "10")
+        bottom.set(qn("w:color"), re.sub(r"[^0-9A-Fa-f]", "", color)[:6] or "222222")
+        borders.append(bottom)
+        properties.append(borders)
 
     def _add_title_block(self, doc: Document, paper: dict[str, Any], branding: dict[str, Any], variant: ExportVariant) -> None:
         section = doc.sections[0]
-        institution = branding.get("institution_name")
-        if institution:
-            paragraph = doc.add_paragraph()
-            paragraph.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            paragraph.paragraph_format.space_after = Pt(1)
-            run = paragraph.add_run(str(institution))
-            run.bold, run.font.size = True, Pt(13)
-        address = str(branding.get("address") or "").strip()
-        if address:
-            address_line = doc.add_paragraph()
-            address_line.alignment = WD_ALIGN_PARAGRAPH.CENTER
-            address_line.paragraph_format.space_after = Pt(1)
-            run = address_line.add_run(address)
-            run.italic, run.font.size = True, Pt(8.5)
-        # Coaching-sheet header: Marks left, Time right, heavy rules above/below.
+        # Branding belongs in the document header/footer. Keep the body of all
+        # exports intentionally sparse: marks/time, title, then questions.
         marks = branding.get("total_marks")
         duration = branding.get("duration_minutes")
         marks_text = f"Marks : {marks}" if marks not in (None, "") else f"Marks : {sum(int((q.get('question_json') or {}).get('marks') or 0) for q in paper['questions'])}"
@@ -667,43 +729,8 @@ class PaperDocumentRenderer:
         fonts = title_run._element.get_or_add_rPr().get_or_add_rFonts()
         for attribute in ("ascii", "hAnsi", "eastAsia", "cs"):
             fonts.set(qn(f"w:{attribute}"), "Times New Roman")
-        subtitle = doc.add_paragraph()
-        subtitle.alignment = WD_ALIGN_PARAGRAPH.CENTER
-        subtitle.paragraph_format.space_after = Pt(2)
-        run = subtitle.add_run(f"{paper['exam']}  |  {paper['subject']}")
-        run.font.size = Pt(9.5)
         self._add_horizontal_rule(doc, bold=True)
-        details = doc.add_table(rows=1, cols=3)
-        details.style = "Table Grid"
-        detail_values = (
-            ("Duration", self._format_duration(duration) if duration not in (None, "") else "Not specified"),
-            ("Total Marks", str(marks) if marks not in (None, "") else str(sum(int((q.get('question_json') or {}).get('marks') or 0) for q in paper['questions']))),
-            ("Questions", str(len(paper["questions"]))),
-        )
-        for index, (label, value) in enumerate(detail_values):
-            cell = details.cell(0, index)
-            cell.text = ""
-            label_run = cell.paragraphs[0].add_run(f"{label}: ")
-            label_run.bold = True
-            label_run.font.size = Pt(9)
-            value_run = cell.paragraphs[0].add_run(value)
-            value_run.font.size = Pt(9)
-            _set_cell_padding(cell)
-            cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
         doc.add_paragraph()
-        if variant == ExportVariant.QUESTION_PAPER:
-            candidate = doc.add_table(rows=1, cols=2)
-            candidate.style = "Table Grid"
-            candidate.cell(0, 0).text, candidate.cell(0, 1).text = "Candidate Name: ______________________________", "Roll Number: __________________"
-            for cell in candidate.rows[0].cells:
-                _set_cell_padding(cell, 120)
-            doc.add_paragraph("Instructions", style="Heading 2")
-            for instruction in branding.get("instructions") or [
-                "Read every question carefully before selecting an answer.",
-                "For single-correct questions, mark one option only.",
-                "Use the answer sheet or space provided by the invigilator.",
-            ]:
-                doc.add_paragraph(str(instruction), style="List Bullet")
 
     @staticmethod
     def _format_duration(value: Any) -> str:
@@ -858,7 +885,11 @@ class PaperDocumentRenderer:
             raise DocumentRenderError("LaTeX pdflatex is not installed on the server.")
         tex_path = self.output_root / f"{stem}.tex"
         pdf_path = self.output_root / f"{stem}.pdf"
-        tex_path.write_text(self._latex_source(paper, variant), encoding="utf-8")
+        branding = dict(paper.get("branding_config") or {})
+        logo_path = self._write_latex_logo(branding, stem)
+        if logo_path:
+            branding["_latex_logo_path"] = str(logo_path)
+        tex_path.write_text(self._latex_source({**paper, "branding_config": branding}, variant), encoding="utf-8")
         for _ in range(2):  # second pass resolves page references/footer
             process = subprocess.run(
                 [pdflatex, "-interaction=nonstopmode", "-halt-on-error", "-output-directory", str(self.output_root), str(tex_path)],
@@ -876,26 +907,49 @@ class PaperDocumentRenderer:
                 aux.unlink(missing_ok=True)
         return pdf_path
 
+    def _write_latex_logo(self, branding: dict[str, Any], stem: str) -> Path | None:
+        value = branding.get("logo_data_url")
+        if not isinstance(value, str) or not value.startswith("data:image/") or "," not in value:
+            return None
+        subtype = value.split(";", 1)[0].removeprefix("data:image/").lower()
+        extension = {"png": ".png", "jpeg": ".jpg", "jpg": ".jpg"}.get(subtype)
+        if extension is None:
+            return None
+        stream = _logo_stream(branding)
+        if stream is None:
+            return None
+        destination = self.output_root / f"{stem}_branding{extension}"
+        destination.write_bytes(stream.getvalue())
+        return destination
+
     def _latex_source(self, paper: dict[str, Any], variant: ExportVariant) -> str:
         branding = paper.get("branding_config") or {}
-        institution = self._latex_escape(branding.get("institution_name") or "")
-        address = self._latex_escape(str(branding.get("address") or "").strip())
-        contact = self._latex_escape(str(branding.get("contact") or "").strip())
-        header_text = self._latex_escape(str(branding.get("header_text") or branding.get("institution_name") or "Question Paper"))
+        layout = branding.get("layout") if isinstance(branding.get("layout"), dict) else {}
+        header_text = self._latex_escape(str(branding.get("header_text") or branding.get("institution_name") or ""))
         footer_text = self._latex_escape(str(branding.get("footer_text") or "").strip())
+        header_left = self._latex_escape(str(layout.get("header_left") or ""))
+        header_center = self._latex_escape(str(layout.get("header_center") or "")) or header_text
+        header_right = self._latex_escape(str(layout.get("header_right") or ""))
+        footer_left = self._latex_escape(str(layout.get("footer_left") or ""))
+        footer_center = self._latex_escape(str(layout.get("footer_center") or "")) or footer_text
+        footer_right = self._latex_escape(str(layout.get("footer_right") or ""))
+        watermark = self._latex_escape(str(branding.get("watermark_text") or "").strip())
+        logo_path = branding.get("_latex_logo_path")
+        if logo_path:
+            logo = rf"\includegraphics[height={float(layout.get('logo_size') or 0.34):.2f}in]{{{self._latex_escape(str(logo_path))}}}"
+            logo_position = str(layout.get("logo_position") or "left")
+            if logo_position == "left":
+                header_left = f"{logo} {header_left}"
+            elif logo_position == "right":
+                header_right = f"{header_right} {logo}"
+            else:
+                header_center = f"{logo} {header_center}"
         title = self._latex_escape(str(paper["title"])) + (" --- ANSWER KEY" if variant == ExportVariant.ANSWER_KEY else "")
-        exam = self._latex_escape(str(paper.get("exam") or ""))
-        subject = self._latex_escape(str(paper.get("subject") or ""))
         marks = branding.get("total_marks")
         if marks in (None, ""):
             marks = sum(int((q.get("question_json") or {}).get("marks") or 0) for q in paper["questions"])
         duration = branding.get("duration_minutes")
         duration_text = self._format_duration(duration) if duration not in (None, "") else "2 : 30 hours"
-        instructions = branding.get("instructions") or [
-            "Read every question carefully before selecting an answer.",
-            "For single-correct questions, mark one option only.",
-            "Use the answer sheet or space provided by the invigilator.",
-        ]
         lines = [
             r"\documentclass[11pt,a4paper]{article}",
             r"\usepackage[margin=19mm,top=17mm,bottom=17mm]{geometry}",
@@ -903,47 +957,37 @@ class PaperDocumentRenderer:
             r"\usepackage{mathptmx}",
             r"\usepackage{enumitem}",
             r"\usepackage{fancyhdr}",
+            r"\usepackage{draftwatermark}",
+            r"\usepackage{graphicx}",
             r"\usepackage{array,tabularx,booktabs}",
             r"\usepackage[hidelinks]{hyperref}",
             r"\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}",
             r"\setlist[enumerate,1]{leftmargin=1.1em,itemsep=3pt,parsep=2pt}",
             r"\setlist[itemize]{leftmargin=1.4em,itemsep=1pt}",
             r"\pagestyle{fancy}\fancyhf{}",
-            rf"\fancyhead[C]{{\footnotesize \textbf{{{header_text}}}}}",
-            rf"\fancyfoot[C]{{\footnotesize {footer_text + r'  $\cdot$  ' if footer_text else ''}Page \thepage}}",
-            r"\renewcommand{\headrulewidth}{0.4pt}",
+            rf"\fancyhead[L]{{\footnotesize \textbf{{{header_left}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[L]{}",
+            rf"\fancyhead[C]{{\footnotesize \textbf{{{header_center}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[C]{}",
+            rf"\fancyhead[R]{{\footnotesize \textbf{{{header_right}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[R]{}",
+            rf"\fancyfoot[L]{{\footnotesize {footer_left + (r'  $\cdot$  Page \thepage' if layout.get('page_number_position') == 'left' else '')}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[L]{}",
+            rf"\fancyfoot[C]{{\footnotesize {footer_center + (r'  $\cdot$  Page \thepage' if layout.get('page_number_position', 'center') == 'center' else '')}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[C]{}",
+            rf"\fancyfoot[R]{{\footnotesize {footer_right + (r'  $\cdot$  Page \thepage' if layout.get('page_number_position') == 'right' else '')}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[R]{}",
+            r"\renewcommand{\headrulewidth}{0.4pt}" if layout.get("divider_enabled", True) else r"\renewcommand{\headrulewidth}{0pt}",
+            rf"\SetWatermarkText{{{watermark}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkText{}",
+            rf"\SetWatermarkScale{{{float(layout.get('watermark_size') or 1.4)}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkScale{1}",
+            rf"\SetWatermarkAngle{{{int(layout.get('watermark_rotation') or 45)}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkAngle{45}",
+            rf"\SetWatermarkLightness{{{max(0, min(100, 100 - int(layout.get('watermark_opacity') or 18)))}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkLightness{100}",
             r"\begin{document}",
         ]
-        if institution:
-            lines.append(rf"{{\centering \large \textbf{{{institution}}}\par}}")
-        if address:
-            lines.append(rf"{{\centering \small \textit{{{address}}}\par}}")
-        if contact and contact.strip():
-            lines.append(rf"{{\centering \footnotesize {contact}\par}}")
         lines += [
             r"\vspace{2mm}",
             rf"\noindent \textbf{{Marks : {self._latex_escape(marks)}}} \hfill \textbf{{Time : {self._latex_escape(duration_text)}}}",
             r"\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}",
             rf"{{\centering \Large \textbf{{{title.upper()}}}\par}}",
-            rf"{{\centering {exam} $|$ {subject}\par}}",
             r"\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}",
-            r"\vspace{1mm}",
-            rf"\noindent \textbf{{Duration:}} {self._latex_escape(self._format_duration(duration) if duration not in (None, '') else 'Not specified')} \quad \textbf{{Total Marks:}} {self._latex_escape(marks)} \quad \textbf{{Questions:}} {len(paper['questions'])}\par",
             r"\vspace{2mm}",
             "",
         ]
-        if variant == ExportVariant.QUESTION_PAPER:
-            lines += [
-                r"\begin{tabularx}{\linewidth}{|X|X|}\hline",
-                r"Candidate Name: \rule{6cm}{0.4pt} & Roll Number: \rule{3.5cm}{0.4pt} \\\hline",
-                r"\end{tabularx}",
-                "",
-                r"\textbf{Instructions}",
-                r"\begin{itemize}[topsep=2pt]",
-                *[rf"\item {self._latex_escape(item)}" for item in instructions],
-                r"\end{itemize}",
-            ]
-        else:
+        if variant == ExportVariant.ANSWER_KEY:
             lines.append(r"\section*{Answer Key}")
             lines.append(r"\noindent\begin{tabularx}{\linewidth}{|c|c|c|X|}\hline")
             lines.append(r"\textbf{Q} & \textbf{Answer} & \textbf{Marks} & \textbf{Concept} \\\hline")

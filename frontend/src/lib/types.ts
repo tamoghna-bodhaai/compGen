@@ -71,11 +71,34 @@ export interface BrandingConfig {
   header_text?: string;
   footer_text?: string;
   instructions?: string[];
+  layout?: BrandingLayout;
+}
+
+export interface BrandingLayout {
+  preset?: "coaching" | "academic" | "watermarked" | "custom";
+  header_enabled?: boolean;
+  footer_enabled?: boolean;
+  header_left?: string;
+  header_center?: string;
+  header_right?: string;
+  footer_left?: string;
+  footer_center?: string;
+  footer_right?: string;
+  logo_position?: "left" | "center" | "right";
+  logo_size?: number;
+  divider_enabled?: boolean;
+  divider_color?: string;
+  page_number_position?: "left" | "center" | "right";
+  font_size?: number;
+  watermark_enabled?: boolean;
+  watermark_opacity?: number;
+  watermark_size?: number;
+  watermark_rotation?: number;
 }
 
 export interface SubtopicPlanPayload {
   topic: string;
-  subtopic: string;
+  subtopic?: string;
   chapters: string[];
   section_title: string;
   question_types: Array<{ type: QuestionType; count: number }>;
@@ -115,6 +138,7 @@ export interface PaperSummary {
 export interface Paper extends PaperSummary {
   generation_config: GenerationConfig;
   branding_config: BrandingConfig;
+  branding_template_id?: string | null;
   sections: PaperSection[];
   questions: PaperQuestion[];
 }
@@ -132,6 +156,7 @@ export interface CatalogRow {
 
 export interface SeedQuestion {
   id: string;
+  source_key?: string;
   source_reference?: string | null;
   source?: string | null;
   exam: string;
@@ -141,6 +166,7 @@ export interface SeedQuestion {
   subtopic?: string | null;
   primary_concept?: string | null;
   secondary_concepts?: string[];
+  question_archetype?: string | null;
   expected_time_minutes?: number | null;
   marks?: number | null;
   question_type: QuestionType;
@@ -148,6 +174,13 @@ export interface SeedQuestion {
   verification_status: string;
   question_json: QuestionJson;
   answer_json?: { correct_answer?: string | null } | null;
+}
+
+export interface SeedComparison {
+  question: PaperQuestion;
+  generation_metadata: Record<string, unknown>;
+  seeds: SeedQuestion[];
+  missing_seed_question_ids: string[];
 }
 
 export interface BrandingProfile {
@@ -173,6 +206,8 @@ export interface CreationState {
   plans: Record<string, CreationPlan>;
   generation_mode: GenerationMode;
   variation_strength: VariationStrength;
+  total_marks: number;
+  duration_minutes: number;
 }
 
 export interface QuestionDraft {

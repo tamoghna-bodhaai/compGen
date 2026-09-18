@@ -57,6 +57,7 @@ CREATE TABLE IF NOT EXISTS papers (
     subject TEXT NOT NULL,
     generation_config TEXT NOT NULL,
     branding_config TEXT NOT NULL DEFAULT '{}',
+    branding_template_id TEXT,
     status TEXT NOT NULL CHECK (status IN ('draft', 'generated', 'final')),
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL
@@ -153,6 +154,9 @@ def initialize_database(path: Path | None = None) -> Path:
             connection.execute(
                 "ALTER TABLE paper_generation_jobs ADD COLUMN control_state TEXT NOT NULL DEFAULT 'active'"
             )
+        paper_columns = {row[1] for row in connection.execute("PRAGMA table_info(papers)")}
+        if "branding_template_id" not in paper_columns:
+            connection.execute("ALTER TABLE papers ADD COLUMN branding_template_id TEXT")
     return target
 
 

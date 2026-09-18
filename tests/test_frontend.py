@@ -19,6 +19,7 @@ class FrontendContractTests(unittest.TestCase):
     def test_app_router_exposes_every_workspace_route(self) -> None:
         for route in (
             "src/app/page.tsx",
+            "src/app/login/page.tsx",
             "src/app/question-bank/page.tsx",
             "src/app/new-paper/page.tsx",
             "src/app/papers/[paperId]/page.tsx",
@@ -31,6 +32,14 @@ class FrontendContractTests(unittest.TestCase):
         self.assertIn("BACKEND_URL", config)
         api = (FRONTEND / "src/lib/api.ts").read_text()
         self.assertIn("fetch(`/api", api)
+
+    def test_test_access_login_and_route_guard_are_present(self) -> None:
+        login = (FRONTEND / "src/components/login-screen.tsx").read_text()
+        proxy = (FRONTEND / "src/proxy.ts").read_text()
+        api = (FRONTEND / "src/lib/api.ts").read_text()
+        self.assertIn("utils@bodhaai.tech", login)
+        self.assertIn("/auth/login", api)
+        self.assertIn("paper_studio_session", proxy)
 
     def test_fastapi_no_longer_mounts_legacy_static_frontend(self) -> None:
         main = (ROOT / "backend/app/main.py").read_text()
@@ -53,6 +62,9 @@ class FrontendContractTests(unittest.TestCase):
             self.assertIn(endpoint, source)
         self.assertIn("downloadPaper", source)
         self.assertIn("custom_instruction", source)
+        self.assertIn("View seeds & compare", source)
+        self.assertIn("Surface wording overlap", source)
+        self.assertIn("/questions/${questionId}/seeds", (FRONTEND / "src/lib/api.ts").read_text())
 
     def test_accessibility_and_responsive_contracts_are_present(self) -> None:
         styles = (FRONTEND / "src/styles/ui.module.css").read_text()

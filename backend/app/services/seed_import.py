@@ -25,6 +25,22 @@ def normalize_options(options: object) -> object:
     return options
 
 
+def mark_unreadable_ocr_options(question: dict) -> None:
+    """Keep scanned MCQs structurally valid without inventing missing text."""
+    options = question["question_json"].get("options")
+    if question.get("verification_status") != "transcription_pending" or not isinstance(options, list):
+        return
+    unreadable_count = sum(isinstance(option, str) and not option.strip() for option in options)
+    if not unreadable_count:
+        return
+    question["question_json"]["options"] = [
+        "[Option unreadable in source scan]" if isinstance(option, str) and not option.strip() else option
+        for option in options
+    ]
+    note = "One or more options were unreadable in the source scan and require review."
+    question["transcription_note"] = " ".join(filter(None, [question.get("transcription_note"), note]))
+
+
 def load_seed_questions(seed_file: Path) -> list[dict]:
     payload = json.loads(seed_file.read_text(encoding="utf-8"))
     if payload.get("schema_version") != 1:
@@ -34,8 +50,16 @@ def load_seed_questions(seed_file: Path) -> list[dict]:
     questions = []
     for raw_question in raw_questions or []:
         question = {**defaults, **raw_question}
+        source_question_number = str(question["source_question_number"]).strip()
+        if not source_question_number:
+            raise ValueError("Every seed question must include a source_question_number")
+        source_number_key = (
+            f"{int(source_question_number):02d}"
+            if source_question_number.isdigit()
+            else source_question_number
+        )
         question["source_key"] = question.get(
-            "source_key", f"{payload['collection_id']}-q{question['source_question_number']:02d}"
+            "source_key", f"{payload['collection_id']}-q{source_number_key}"
         )
         question["source_reference"] = question.get(
             "source_reference",
@@ -46,6 +70,7 @@ def load_seed_questions(seed_file: Path) -> list[dict]:
         else:
             question["question_json"] = dict(question["question_json"])
         question["question_json"]["options"] = normalize_options(question["question_json"].get("options", []))
+        mark_unreadable_ocr_options(question)
         questions.append(question)
     if not isinstance(questions, list) or not questions:
         raise ValueError("Seed file must contain at least one question")

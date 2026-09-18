@@ -11,8 +11,10 @@ ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR / "backend"))
 
 from app.schemas.papers import AddManualQuestionRequest, PaperCreateRequest, PaperUpdateRequest, QuestionEditRequest
+from app.db.database import get_connection
 from app.services.branding import BrandingProfileService
 from app.services.papers import PaperConflictError, PaperService
+from app.services.seed_import import upsert_seed_questions
 
 
 def paper_request() -> PaperCreateRequest:
@@ -37,6 +39,7 @@ class PaperServiceTests(unittest.TestCase):
         os.environ["DATABASE_URL"] = f"sqlite:///{Path(self.temporary_directory.name) / 'papers.db'}"
         self.service = PaperService()
         self.paper = self.service.create(paper_request())
+        upsert_seed_questions(ROOT_DIR / "sample_data" / "jee_definite_integrals_questions.json")
 
     def tearDown(self) -> None:
         if self.previous_database_url is None:
@@ -179,6 +182,24 @@ class PaperServiceTests(unittest.TestCase):
         self.assertEqual(profile["branding_config"]["footer_text"], "Practice")
         self.assertEqual(BrandingProfileService().list()[0]["name"], "Apex Academy")
 
+    def test_branding_templates_can_be_updated_duplicated_and_deleted(self) -> None:
+        service = BrandingProfileService()
+        profile = service.save("Coaching", {"layout": {"preset": "coaching"}})
+        updated = service.update(profile["id"], "Coaching standard", {"layout": {"preset": "custom", "header_left": "Marks"}})
+        self.assertEqual(updated["name"], "Coaching standard")
+        copied = service.duplicate(profile["id"])
+        self.assertIsNotNone(copied)
+        self.assertNotEqual(copied["id"], profile["id"])
+        self.assertEqual(service.resolve(profile["id"], {"footer_text": "Page footer"})["footer_text"], "Page footer")
+        self.assertTrue(service.delete(profile["id"]))
+
+    def test_paper_can_select_and_clear_a_branding_template(self) -> None:
+        template = BrandingProfileService().save("Export template", {"header_text": "Template header"})
+        selected = self.service.update(self.paper["id"], PaperUpdateRequest(branding_template_id=template["id"]))
+        self.assertEqual(selected["branding_template_id"], template["id"])
+        cleared = self.service.update(self.paper["id"], PaperUpdateRequest(branding_template_id=None))
+        self.assertIsNone(cleared["branding_template_id"])
+
     def test_question_can_be_moved_back_to_unsectioned(self) -> None:
         paper_id = self.paper["id"]
         paper = self.service.add_section(paper_id, "Part A")
@@ -217,6 +238,51 @@ class PaperServiceTests(unittest.TestCase):
         questions = [question for question in updated["questions"] if question["section_id"] == section["id"]]
         self.assertEqual([question["question_json"]["stem"] for question in questions], ["First", "Second"])
         self.assertEqual(updated["requested_question_count"], 1)
+
+    def test_generated_question_resolves_recorded_seeds_in_retrieval_order(self) -> None:
+        paper = self.service.add_manual_question(
+            self.paper["id"],
+            AddManualQuestionRequest.model_validate({"question_type": "single_correct_mcq", "stem": "Generated", "options": ["A", "B", "C", "D"], "difficulty": 3}),
+        )
+        question_id = paper["questions"][0]["id"]
+        with get_connection() as connection:
+            seed_ids = [row["id"] for row in connection.execute("SELECT id FROM questions ORDER BY source_key LIMIT 2").fetchall()]
+            connection.execute(
+                "UPDATE paper_questions SET generation_metadata = ? WHERE id = ?",
+                ('{"origin":"generated","seed_question_ids":["%s","%s"],"similarity_score":0.42}' % tuple(reversed(seed_ids)), question_id),
+            )
+        result = self.service.get_question_seeds(self.paper["id"], question_id)
+        self.assertEqual([seed["id"] for seed in result["seeds"]], list(reversed(seed_ids)))
+        self.assertEqual(result["generation_metadata"]["similarity_score"], 0.42)
+        self.assertEqual(result["missing_seed_question_ids"], [])
+
+    def test_seed_comparison_rejects_manual_questions_and_handles_missing_seed_records(self) -> None:
+        paper = self.service.add_manual_question(
+            self.paper["id"],
+            AddManualQuestionRequest.model_validate({"question_type": "single_correct_mcq", "stem": "Manual", "options": ["A", "B", "C", "D"], "difficulty": 3}),
+        )
+        question_id = paper["questions"][0]["id"]
+        with self.assertRaises(PaperConflictError):
+            self.service.get_question_seeds(self.paper["id"], question_id)
+        with get_connection() as connection:
+            seed_id = connection.execute("SELECT id FROM questions ORDER BY source_key LIMIT 1").fetchone()["id"]
+            connection.execute(
+                "UPDATE paper_questions SET generation_metadata = ? WHERE id = ?",
+                ('{"origin":"generated","seed_question_ids":["missing-seed","%s"]}' % seed_id, question_id),
+            )
+        result = self.service.get_question_seeds(self.paper["id"], question_id)
+        self.assertEqual(result["missing_seed_question_ids"], ["missing-seed"])
+        self.assertEqual([seed["id"] for seed in result["seeds"]], [seed_id])
+
+    def test_seed_comparison_requires_question_to_belong_to_paper(self) -> None:
+        other_paper = self.service.create(paper_request())
+        question = self.service.add_manual_question(
+            self.paper["id"],
+            AddManualQuestionRequest.model_validate({"question_type": "single_correct_mcq", "stem": "Question", "options": ["A", "B", "C", "D"], "difficulty": 3}),
+        )["questions"][0]
+        with self.assertRaises(Exception) as raised:
+            self.service.get_question_seeds(other_paper["id"], question["id"])
+        self.assertIn("not found", str(raised.exception).lower())
 
 
 if __name__ == "__main__":

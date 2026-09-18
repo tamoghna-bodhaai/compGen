@@ -13,6 +13,17 @@ describe("paper creation payload", () => {
     expect(payload.question_types).toEqual([{ type: "single_correct_mcq", count: 5 }]);
     expect(payload.difficulty_distribution).toEqual([{ difficulty: 3, count: 5 }]);
   });
+
+  it("uses the compatible top-level request shape for one topic-only plan", () => {
+    const creation = defaultCreation();
+    creation.chapters = ["Calculus"];
+    creation.subtopicKeys = ["Definite Integrals::"];
+    creation.plans[creation.subtopicKeys[0]] = defaultPlan();
+    const payload = buildCreationPayload(creation);
+    expect(payload.usesTopicOnlyRequest).toBe(true);
+    expect(payload.subtopic_plans[0]).not.toHaveProperty("subtopic");
+    expect(payload.question_types).toEqual([{ type: "single_correct_mcq", count: 5 }]);
+  });
 });
 
 describe("dashboard state", () => {

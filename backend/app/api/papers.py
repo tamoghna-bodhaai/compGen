@@ -18,6 +18,7 @@ from app.schemas.papers import (
 )
 from app.services.generation import GenerationFailure
 from app.services.document_renderer import DocumentRenderError, PaperDocumentRenderer
+from app.services.branding import BrandingProfileService
 from app.services.openrouter import ModelConfigurationError
 from app.services.papers import PaperConflictError, PaperNotFoundError, PaperService
 from app.services.retrieval import RetrievalError
@@ -166,6 +167,14 @@ def edit_question(paper_id: str, question_id: str, request: QuestionEditRequest)
         _raise(error)
 
 
+@router.get("/{paper_id}/questions/{question_id}/seeds")
+def get_question_seeds(paper_id: str, question_id: str) -> dict:
+    try:
+        return PaperService().get_question_seeds(paper_id, question_id)
+    except (PaperNotFoundError, PaperConflictError) as error:
+        _raise(error)
+
+
 @router.put("/{paper_id}/questions/{question_id}/lock")
 def lock_question(paper_id: str, question_id: str, request: LockRequest) -> dict:
     try:
@@ -208,6 +217,9 @@ def _cleanup_export(path: Path) -> None:
 def export_paper(paper_id: str, request: PaperExportRequest, background_tasks: BackgroundTasks) -> FileResponse:
     try:
         paper = PaperService().get(paper_id)
+        template_id = request.branding_template_id if request.branding_template_id is not None else paper.get("branding_template_id")
+        resolved_branding = BrandingProfileService().resolve(template_id, paper.get("branding_config"))
+        paper["branding_config"] = {**resolved_branding, **(request.branding_overrides or {})}
         path, media_type = PaperDocumentRenderer().export(paper, output_format=request.format, variant=request.variant)
         background_tasks.add_task(_cleanup_export, path)
         return FileResponse(path, media_type=media_type, filename=path.name, background=background_tasks)

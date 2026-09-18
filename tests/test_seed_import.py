@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import sqlite3
 import sys
 import tempfile
@@ -9,7 +10,13 @@ from pathlib import Path
 ROOT_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT_DIR / "backend"))
 
-from app.services.seed_import import normalize_options, upsert_seed_questions, validate_question
+from app.services.seed_import import (
+    load_seed_questions,
+    mark_unreadable_ocr_options,
+    normalize_options,
+    upsert_seed_questions,
+    validate_question,
+)
 
 
 class SeedImportTests(unittest.TestCase):
@@ -42,6 +49,37 @@ class SeedImportTests(unittest.TestCase):
             {"id": "c", "text": "Third"}, {"id": "d", "text": "Fourth"},
         ]
         self.assertEqual(normalize_options(labelled_options), ["First", "Second", "Third", "Fourth"])
+
+    def test_string_source_question_numbers_make_stable_seed_keys(self) -> None:
+        payload = {
+            "schema_version": 1,
+            "collection_id": "test-collection",
+            "source_document": "test.pdf",
+            "defaults": {
+                "exam": "JEE", "subject": "Physics", "chapter": "Thermodynamics",
+                "topic": "Thermodynamics", "source": "test", "verification_status": "pending",
+            },
+            "questions": [{
+                "source_question_number": "1", "source_page": 1,
+                "question_type": "single_correct_mcq", "difficulty": 3,
+                "primary_concept": "First law", "question_archetype": "test",
+                "stem": "Choose.", "options": ["A", "B", "C", "D"],
+            }],
+        }
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            seed_file = Path(temporary_directory) / "seed.json"
+            seed_file.write_text(json.dumps(payload), encoding="utf-8")
+            self.assertEqual(load_seed_questions(seed_file)[0]["source_key"], "test-collection-q01")
+
+    def test_unreadable_scanned_options_are_marked_for_review(self) -> None:
+        question = {
+            "verification_status": "transcription_pending",
+            "question_json": {"options": ["", "Readable"]},
+            "transcription_note": "OCR transcription.",
+        }
+        mark_unreadable_ocr_options(question)
+        self.assertEqual(question["question_json"]["options"][0], "[Option unreadable in source scan]")
+        self.assertIn("require review", question["transcription_note"])
 
 
 if __name__ == "__main__":

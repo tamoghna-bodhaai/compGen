@@ -5,6 +5,7 @@ import type {
   Paper,
   PaperSummary,
   SeedQuestion,
+  SeedComparison,
 } from "@/lib/types";
 
 export class ApiError extends Error {
@@ -12,6 +13,21 @@ export class ApiError extends Error {
     super(message);
     this.name = "ApiError";
   }
+}
+
+function errorDetailMessage(detail: unknown): string | null {
+  if (typeof detail === "string" && detail.trim()) return detail;
+  if (Array.isArray(detail)) {
+    const messages = detail.map((item) => {
+      if (!item || typeof item !== "object") return null;
+      const issue = item as { loc?: unknown; msg?: unknown };
+      const location = Array.isArray(issue.loc) ? issue.loc.filter((part) => part !== "body").join(".") : "";
+      const message = typeof issue.msg === "string" ? issue.msg : null;
+      return message ? `${location ? `${location}: ` : ""}${message}` : null;
+    }).filter((message): message is string => Boolean(message));
+    return messages.length ? messages.join("; ") : null;
+  }
+  return null;
 }
 
 export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
@@ -26,8 +42,8 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
   if (!response.ok) {
     let message = "Something went wrong.";
     try {
-      const body = (await response.json()) as { detail?: string };
-      message = body.detail || message;
+      const body = (await response.json()) as { detail?: unknown };
+      message = errorDetailMessage(body.detail) || message;
     } catch {
       // The API sometimes returns an empty body for transport failures.
     }
@@ -38,27 +54,35 @@ export async function apiRequest<T>(path: string, init: RequestInit = {}): Promi
 }
 
 export const api = {
+  login: (email: string, accessCode: string) => apiRequest<{ authenticated: boolean; user: { email: string } }>("/auth/login", { method: "POST", body: JSON.stringify({ email, access_code: accessCode }) }),
+  logout: () => apiRequest<void>("/auth/logout", { method: "POST" }),
+  session: () => apiRequest<{ authenticated: boolean; user: { email: string } | null }>("/auth/session"),
   papers: (signal?: AbortSignal) => apiRequest<{ items: PaperSummary[] }>("/papers", { signal }),
   paper: (id: string) => apiRequest<Paper>(`/papers/${id}`),
+  paperQuestionSeeds: (paperId: string, questionId: string) => apiRequest<SeedComparison>(`/papers/${paperId}/questions/${questionId}/seeds`),
   createPaper: (body: unknown) => apiRequest<Paper>("/papers", { method: "POST", body: JSON.stringify(body) }),
   updatePaper: (id: string, body: unknown) => apiRequest<Paper>(`/papers/${id}`, { method: "PUT", body: JSON.stringify(body) }),
   catalog: () => apiRequest<{ items: CatalogRow[] }>("/questions/catalog"),
   ingestionJobs: (signal?: AbortSignal) => apiRequest<{ items: IngestionJob[] }>("/questions/ingestion-jobs", { signal }),
+  deleteIngestionJob: (id: string) => apiRequest<void>(`/questions/ingestion-jobs/${id}`, { method: "DELETE" }),
   ingest: (body: FormData) => apiRequest<{ job: IngestionJob }>("/questions/ingest", { method: "POST", body }),
   questions: (query: URLSearchParams) => apiRequest<{ items: SeedQuestion[]; total: number; offset: number }>(`/questions?${query}`),
   question: (id: string) => apiRequest<SeedQuestion>(`/questions/${id}`),
   brandingProfiles: () => apiRequest<{ items: BrandingProfile[] }>("/branding-profiles"),
   saveBrandingProfile: (body: unknown) => apiRequest<BrandingProfile>("/branding-profiles", { method: "POST", body: JSON.stringify(body) }),
+  updateBrandingProfile: (id: string, body: unknown) => apiRequest<BrandingProfile>(`/branding-profiles/${id}`, { method: "PUT", body: JSON.stringify(body) }),
+  duplicateBrandingProfile: (id: string) => apiRequest<BrandingProfile>(`/branding-profiles/${id}/duplicate`, { method: "POST" }),
+  deleteBrandingProfile: (id: string) => apiRequest<void>(`/branding-profiles/${id}`, { method: "DELETE" }),
   post: <T>(path: string, body?: unknown) => apiRequest<T>(path, { method: "POST", ...(body === undefined ? {} : { body: JSON.stringify(body) }) }),
   put: <T>(path: string, body: unknown) => apiRequest<T>(path, { method: "PUT", body: JSON.stringify(body) }),
   delete: <T>(path: string) => apiRequest<T>(path, { method: "DELETE" }),
 };
 
-export async function downloadPaper(paper: Paper | PaperSummary, format: "pdf" | "docx", variant: "question_paper" | "answer_key") {
+export async function downloadPaper(paper: Paper | PaperSummary, format: "pdf" | "docx", variant: "question_paper" | "answer_key", brandingTemplateId?: string | null, brandingOverrides?: { total_marks?: number | null; duration_minutes?: number | null }) {
   const response = await fetch(`/api/papers/${paper.id}/export`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ format, variant }),
+    body: JSON.stringify({ format, variant, ...(brandingTemplateId ? { branding_template_id: brandingTemplateId } : {}), ...(brandingOverrides ? { branding_overrides: brandingOverrides } : {}) }),
   });
   if (!response.ok) {
     let message = "Export failed.";

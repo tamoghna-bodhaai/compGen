@@ -53,13 +53,19 @@ export function JobProgress({ job, onPause, onResume, onCancel }: { job: Generat
 
 export function IngestionProgress({ job }: { job: IngestionJob }) {
   const active = ["queued", "running"].includes(job.state);
-  const percent = job.total_chunks ? Math.round((job.completed_chunks || 0) / job.total_chunks * 100) : 0;
-  return <div className={`${s.jobProgress} ${s[`job_${job.state}`]}`}>
-    <div className={s.jobHead}><div><span className={`${s.liveDot} ${active ? s.pulse : ""}`} /><strong>{active ? "Book ingestion in progress" : job.state === "failed" ? "Book ingestion needs attention" : "Latest book ingestion"}</strong></div>{job.total_chunks ? <span>{job.completed_chunks || 0}/{job.total_chunks}</span> : null}</div>
-    <p>{job.message || job.phase}</p>
-    {active && <div className={s.progressTrack} aria-label={`${percent}% complete`}><span style={{ width: `${percent}%` }} /></div>}
-    {!!job.ingested_questions && <p>{job.ingested_questions} questions ingested</p>}
-    {job.error_message && <p className={s.errorText}>{job.error_message}</p>}
+  const total = job.total_chunks || 0;
+  const completed = Math.min(job.completed_chunks || 0, total);
+  const percent = total ? Math.round(completed / total * 100) : 0;
+  const title = active ? "Question ingestion in progress" : job.state === "failed" ? "Question ingestion needs attention" : "Latest question ingestion";
+  const progressLabel = total ? `${completed} of ${total} source chunks classified` : "Preparing source chunks";
+  const progressStatus = job.state === "failed" ? "Import failed" : `${percent}% complete`;
+  return <div className={`${s.ingestionProgress} ${s[`job_${job.state}`]}`}>
+    <div className={s.ingestionSummary}>
+      <div className={s.ingestionStatus}><span className={`${s.liveDot} ${active ? s.pulse : ""}`} /><div><div className={s.ingestionTitle}><strong>{title}</strong>{total > 0 && <span className={`${s.ingestionPercent} ${job.state === "failed" ? s.ingestionPercentFailed : ""}`}>{progressStatus}</span>}</div><span>{job.message || job.phase || "Preparing your source"}</span></div></div>
+    </div>
+    {active && <div className={s.ingestionTrack} role="progressbar" aria-label={progressLabel} aria-valuemin={0} aria-valuemax={total || undefined} aria-valuenow={total ? completed : undefined}><span style={{ width: `${percent}%` }} /></div>}
+    <div className={s.ingestionMeta}><span>{total ? progressLabel : "Organizing the source for classification"}</span>{job.ingested_questions ? <strong>{job.ingested_questions} questions found</strong> : null}</div>
+    {job.error_message && <div className={s.ingestionError} role="alert"><strong>Import error</strong><span>{job.error_message}</span></div>}
   </div>;
 }
 

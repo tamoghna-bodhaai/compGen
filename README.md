@@ -38,6 +38,40 @@ npm run dev
 
 Open `http://127.0.0.1:3000/` for Paper Studio. FastAPI documentation remains at `http://127.0.0.1:8000/docs`. The Next.js server proxies relative `/api/*` calls to FastAPI; set `BACKEND_URL` in `frontend/.env.local` only when the backend uses another address.
 
+## Test access
+
+Paper Studio is protected by a small test-phase access gate. Only the email in
+`AUTH_ALLOWED_EMAIL` (set to `utils@bodhaai.tech`) and one of the reusable,
+comma-separated five-digit numeric codes in `AUTH_ACCESS_CODES` can sign in. This is deliberately
+not a multi-user account system: codes are shared, there is no registration or
+password reset, and changing the environment variable rotates access.
+
+For local development, copy the values from `.env.example`, choose real codes
+and a random `AUTH_SESSION_SECRET` of at least 32 characters, and leave
+`AUTH_COOKIE_SECURE=false`. Never commit real codes or secrets.
+
+## Railway deployment
+
+Create two Railway services from this repository, setting each service's Root
+Directory so it discovers the matching `railway.toml`:
+
+1. Create the **API** service with Root Directory `backend`. Attach a Railway
+   Volume mounted at `/data`, then set `DATABASE_URL=sqlite:////data/question_generator.db`.
+   Add `AUTH_ALLOWED_EMAIL=utils@bodhaai.tech`, `AUTH_ACCESS_CODES`, a random
+   32+ character `AUTH_SESSION_SECRET`, `AUTH_SESSION_TTL_HOURS=168`, and
+   `AUTH_COOKIE_SECURE=true`. Copy the existing OpenRouter variables too when
+   AI generation or ingestion is needed.
+2. Create the **frontend** service with Root Directory `frontend`. Set
+   `BACKEND_URL` to the API service's Railway private URL, including its port
+   (for example `http://question-paper-api.railway.internal:8000`). Generate a
+   public domain only for this frontend service.
+3. Confirm the API health check at `/api/health`, then open the frontend public
+   URL. A backend restart must retain the SQLite file on the mounted Volume.
+
+The backend is intentionally private behind the frontend proxy. Before any
+multi-user or production release, replace shared codes and SQLite with a
+proper user model and PostgreSQL.
+
 ## Paper Studio frontend
 
 The TypeScript Next.js application in `frontend/` lets a teacher:
@@ -64,7 +98,7 @@ mathematical correctness or wording ambiguity.
 
 Open **Question bank** and choose **Ingest questions**. Upload one PDF or DOCX (up to 35 MB), or paste question text, then optionally add classification guidance such as `Treat this as JEE Mathematics, Class 12`. The upload queues a persisted ingestion job, with live extraction, classification, and saving status in the modal and dashboard. The backend extracts embedded PDF text first and uses local Tesseract OCR for scanned PDFs when needed, then asks OpenRouter to faithfully transcribe and classify each question as JEE/NEET, subject, chapter, topic/subtopic, type, and difficulty. Imported items are marked `pending_review`; missing answers or unclear text are not invented.
 
-Set `OPENROUTER_API_KEY` plus either `CLASSIFICATION_MODEL` (recommended) or `GENERATION_MODEL` to use ingestion. `CLASSIFICATION_MODEL` lets you choose a dedicated model for ingestion/classification independently from paper generation — e.g. `CLASSIFICATION_MODEL=google/gemini-3-flash-preview` (or your preferred OpenRouter slug). Set `CLASSIFICATION_FALLBACK_MODEL` to automatically retry a single fallback model if the primary returns an error or invalid JSON (e.g. `CLASSIFICATION_FALLBACK_MODEL=z-ai/glm-5.3`). Update either model freely in `.env` without code changes.
+Set `OPENROUTER_API_KEY` plus either `CLASSIFICATION_MODEL` (recommended) or `GENERATION_MODEL` to use ingestion. `CLASSIFICATION_MODEL` lets you choose a dedicated model for ingestion/classification independently from paper generation — e.g. `CLASSIFICATION_MODEL=google/gemini-3-flash-preview` (or your preferred OpenRouter slug). Set `CLASSIFICATION_FALLBACK_MODEL` to automatically retry a single fallback model if the primary returns an error or invalid JSON (e.g. `CLASSIFICATION_FALLBACK_MODEL=z-ai/glm-5.3`). For a vision-capable OpenRouter classification model, set `CLASSIFICATION_USE_VISION=true`; image-only PDFs are then rendered page-by-page and sent directly to that model, bypassing local Tesseract OCR. Update either model freely in `.env` without code changes.
 
 PDF text is extracted with `pypdf` first and automatically retried with `PyMuPDF` (`fitz`) when the first pass returns sparse/no text — this fixes false `No selectable text / Use an OCR-enabled PDF` errors on clean digital PDFs that use CID fonts or XObjects. True scanned/image-only PDFs still return a clear diagnostic suggesting re-export or paste.
 

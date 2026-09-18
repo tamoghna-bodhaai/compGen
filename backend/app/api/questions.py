@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Query, Response, UploadFile, status
 
 from app.db.database import decode_question_row, get_connection
 from app.services.ingestion import IngestionError, MAX_UPLOAD_BYTES, QuestionIngestionService
@@ -28,6 +28,7 @@ async def ingest_questions(
         if len(content) > MAX_UPLOAD_BYTES:
             raise IngestionError("Uploads must be 35 MB or smaller.")
         service = QuestionIngestionService()
+        service.ensure_configuration()
         job = service.create_job(filename)
         background_tasks.add_task(
             _run_ingestion_job, job["id"], filename=filename, content_type=file.content_type if file else None,
@@ -51,6 +52,16 @@ def get_ingestion_job(job_id: str) -> dict:
         return QuestionIngestionService().get_job(job_id)
     except IngestionError as error:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(error)) from error
+
+
+@router.delete("/ingestion-jobs/{job_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_ingestion_job(job_id: str) -> Response:
+    try:
+        QuestionIngestionService().delete_job(job_id)
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
+    except IngestionError as error:
+        status_code = status.HTTP_409_CONFLICT if "active" in str(error).lower() else status.HTTP_404_NOT_FOUND
+        raise HTTPException(status_code=status_code, detail=str(error)) from error
 
 
 @router.get("")
