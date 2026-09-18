@@ -63,6 +63,13 @@ _MATH_FUNCTIONS = {"sin", "cos", "tan", "cot", "sec", "csc", "log", "ln", "exp",
 _NARY_SYMBOLS = {"int": "∫", "iint": "∬", "iiint": "∭", "oint": "∮", "sum": "∑", "prod": "∏"}
 _MATH_SPACING = {",", "!", ";", ":", "quad", "qquad", "enspace", "thinspace", " "}
 
+# Header slots that duplicate the title-block Marks/Time are suppressed at export
+# so the paper's Marks/Time (from branding_config / export overrides) appear only
+# once — in the title block — even when a legacy branding profile still stores
+# hardcoded header values like "Marks : 150" / "Time : 2 : 30 hours".
+_MARKS_HEADER_RE = re.compile(r"^\s*Marks\s*:", re.I)
+_TIME_HEADER_RE = re.compile(r"^\s*Time\s*:", re.I)
+
 
 def _xml_safe_text(value: Any) -> str:
     """Remove characters WordprocessingML cannot represent.
@@ -574,7 +581,7 @@ class PaperDocumentRenderer:
         section.left_margin, section.right_margin = Mm(19), Mm(19)
         section.header_distance, section.footer_distance = Inches(0.3), Inches(0.3)
         self._configure_styles(doc)
-        self._add_header_footer(doc, branding)
+        self._add_header_footer(doc, branding, paper)
         self._add_title_block(doc, paper, branding, variant)
         if variant == ExportVariant.ANSWER_KEY:
             self._add_answer_key(doc, paper)
@@ -602,7 +609,7 @@ class PaperDocumentRenderer:
             question.paragraph_format.space_before, question.paragraph_format.space_after = Pt(8), Pt(3)
 
     @staticmethod
-    def _add_header_footer(doc: Document, branding: dict[str, Any]) -> None:
+    def _add_header_footer(doc: Document, branding: dict[str, Any], paper: dict[str, Any] | None = None) -> None:
         section = doc.sections[0]
         section.different_first_page_header_footer = False
         layout = branding.get("layout") if isinstance(branding.get("layout"), dict) else {}
@@ -649,6 +656,29 @@ class PaperDocumentRenderer:
                 str(layout.get("header_center") or branding.get("header_text") or branding.get("institution_name") or ""),
                 str(layout.get("header_right") or ""),
             ]
+            # Paper export Marks/Time are the single source of truth (rendered in
+            # the title block).  Clear any legacy header slots that duplicate them
+            # so a saved "Marks : 150 / Time : ..." preset does not produce the
+            # double-header seen in the bug report when the export overrides differ.
+            if _MARKS_HEADER_RE.match(header_values[0]):
+                header_values[0] = ""
+            if _TIME_HEADER_RE.match(header_values[2]):
+                header_values[2] = ""
+            # Header preset should not hardcode a paper title — the body title block
+            # is authoritative.  If the saved header_center is a stale title (e.g.
+            # "TEST ON DEFINITE INTEGRALS") that differs from the current paper
+            # title and is not the institution/header_text, fall back to institution.
+            if paper is not None and header_values[1]:
+                paper_title = str(paper.get("title") or "").strip()
+                institution = str(branding.get("header_text") or branding.get("institution_name") or "").strip()
+                layout_center_raw = str(layout.get("header_center") or "").strip()
+                if layout_center_raw and paper_title and layout_center_raw.lower() != paper_title.lower() and layout_center_raw.lower() != institution.lower():
+                    # Legacy presets stored the source paper's title (e.g.
+                    # "TEST ON DEFINITE INTEGRALS") in header_center.  Suppress
+                    # only that pattern so an intentional custom header like
+                    # "INTEGRALS TEST" still renders.
+                    if re.search(r"test\s+on", layout_center_raw, re.I):
+                        header_values[1] = institution
             alignments = [WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.RIGHT]
             logo_position = str(layout.get("logo_position") or "left")
             logo = _logo_stream(branding)
@@ -927,9 +957,22 @@ class PaperDocumentRenderer:
         layout = branding.get("layout") if isinstance(branding.get("layout"), dict) else {}
         header_text = self._latex_escape(str(branding.get("header_text") or branding.get("institution_name") or ""))
         footer_text = self._latex_escape(str(branding.get("footer_text") or "").strip())
-        header_left = self._latex_escape(str(layout.get("header_left") or ""))
-        header_center = self._latex_escape(str(layout.get("header_center") or "")) or header_text
-        header_right = self._latex_escape(str(layout.get("header_right") or ""))
+        raw_header_left = str(layout.get("header_left") or "")
+        raw_header_center = str(layout.get("header_center") or "")
+        raw_header_right = str(layout.get("header_right") or "")
+        # See DOCX path: suppress legacy Marks/Time slots and stale titles.
+        if _MARKS_HEADER_RE.match(raw_header_left):
+            raw_header_left = ""
+        if _TIME_HEADER_RE.match(raw_header_right):
+            raw_header_right = ""
+        paper_title = str(paper.get("title") or "").strip()
+        institution = str(branding.get("header_text") or branding.get("institution_name") or "").strip()
+        if raw_header_center and paper_title and raw_header_center.lower() != paper_title.lower() and raw_header_center.lower() != institution.lower():
+            if re.search(r"test\s+on", raw_header_center, re.I):
+                raw_header_center = ""
+        header_left = self._latex_escape(raw_header_left)
+        header_center = self._latex_escape(raw_header_center) or header_text
+        header_right = self._latex_escape(raw_header_right)
         footer_left = self._latex_escape(str(layout.get("footer_left") or ""))
         footer_center = self._latex_escape(str(layout.get("footer_center") or "")) or footer_text
         footer_right = self._latex_escape(str(layout.get("footer_right") or ""))
