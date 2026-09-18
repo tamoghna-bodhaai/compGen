@@ -86,7 +86,10 @@ class DocumentRendererTests(unittest.TestCase):
         self.assertIn("Answer Key", answers_text)
         self.assertEqual(question_document.styles["Normal"].font.name, "Times New Roman")
         self.assertIn("Apex Academy · Mathematics", "\n".join(item.text for item in question_document.sections[0].header.paragraphs))
-        self.assertIn("Practice paper", "\n".join(item.text for item in question_document.sections[0].footer.paragraphs))
+        footer = question_document.sections[0].footer
+        footer_text = "\n".join(item.text for item in footer.paragraphs)
+        footer_text += "\n" + "\n".join(cell.text for table in footer.tables for row in table.rows for cell in row.cells)
+        self.assertIn("Practice paper", footer_text)
         self.assertAlmostEqual(question_document.sections[0].page_width, 7560000, delta=500)  # A4 width in EMU
         self.assertAlmostEqual(question_document.sections[0].page_height, 10692000, delta=500)  # A4 height in EMU
 
@@ -118,7 +121,7 @@ class DocumentRendererTests(unittest.TestCase):
         paper = PaperService().get(self.paper["id"])
         paper["branding_config"]["layout"] = {
             "preset": "watermarked", "header_left": "Marks : 4", "header_center": "INTEGRALS TEST",
-            "header_right": "Time : 60 min", "footer_center": "Apex practice", "watermark_enabled": True,
+            "header_right": "Time : 60 min", "footer_center": "Apex practice", "footer_right": "apex.example", "watermark_enabled": True,
             "watermark_opacity": 16, "watermark_rotation": 315, "divider_enabled": True,
         }
         renderer = PaperDocumentRenderer(Path(self.tmp.name) / "exports")
@@ -128,8 +131,28 @@ class DocumentRendererTests(unittest.TestCase):
         source = renderer._latex_source(paper, ExportVariant.QUESTION_PAPER)
         self.assertIn("INTEGRALS TEST", xml)
         self.assertIn("APEX CONFIDENTIAL", xml)
+        footer_xml = document.sections[0].footer._element.xml
+        self.assertIn("Apex practice", footer_xml)
+        self.assertIn("apex.example", footer_xml)
+        self.assertIn("PAGE", footer_xml)
+        self.assertIn("<w:bottom", footer_xml)
         self.assertIn(r"\fancyhead[L]", source)
+        self.assertIn(r"\fancyfoot[C]{\footnotesize Page \thepage}", source)
+        self.assertIn(r"\renewcommand{\footrulewidth}{0.4pt}", source)
         self.assertIn(r"\SetWatermarkText{APEX CONFIDENTIAL}", source)
+
+    def test_generic_practice_paper_header_is_suppressed(self) -> None:
+        paper = PaperService().get(self.paper["id"])
+        paper["branding_config"]["header_text"] = "Practice Paper"
+        paper["branding_config"]["layout"] = {"header_center": "Practice Paper", "divider_enabled": True}
+        path, _ = PaperDocumentRenderer(Path(self.tmp.name) / "exports").export(
+            paper, output_format=ExportFormat.DOCX, variant=ExportVariant.QUESTION_PAPER,
+        )
+        header = Document(path).sections[0].header
+        header_text = "\n".join(item.text for item in header.paragraphs)
+        header_text += "\n" + "\n".join(cell.text for table in header.tables for row in table.rows for cell in row.cells)
+        self.assertNotIn("Practice Paper", header_text)
+        self.assertIn("Apex Academy", header_text)
 
 
 if __name__ == "__main__":

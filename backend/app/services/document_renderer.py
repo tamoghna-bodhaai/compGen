@@ -69,6 +69,7 @@ _MATH_SPACING = {",", "!", ";", ":", "quad", "qquad", "enspace", "thinspace", " 
 # hardcoded header values like "Marks : 150" / "Time : 2 : 30 hours".
 _MARKS_HEADER_RE = re.compile(r"^\s*Marks\s*:", re.I)
 _TIME_HEADER_RE = re.compile(r"^\s*Time\s*:", re.I)
+_GENERIC_PAPER_HEADER_RE = re.compile(r"^\s*practi[cs]e\s+paper\s*$", re.I)
 
 
 def _xml_safe_text(value: Any) -> str:
@@ -625,7 +626,10 @@ class PaperDocumentRenderer:
             if logo is not None:
                 header.add_run().add_picture(logo, width=Inches(0.34))
                 header.add_run("  ")
-            header_text = str(branding.get("header_text") or branding.get("institution_name") or "").strip()
+            header_text = str(branding.get("header_text") or "").strip()
+            if _GENERIC_PAPER_HEADER_RE.match(header_text):
+                header_text = ""
+            header_text = header_text or str(branding.get("institution_name") or "").strip()
             if header_text:
                 header.add_run(header_text).bold = False
             contact_line = " · ".join(part for part in (str(branding.get("address") or "").strip(), str(branding.get("contact") or "").strip()) if part)
@@ -638,11 +642,21 @@ class PaperDocumentRenderer:
             if watermark:
                 _add_watermark(header, watermark)
             footer = section.footer.paragraphs[0]
-            footer.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            footer.clear()
+            PaperDocumentRenderer._set_paragraph_border(footer, "222222")
+            footer_table = section.footer.add_table(rows=1, cols=3, width=section.page_width - section.left_margin - section.right_margin)
+            for cell in footer_table.rows[0].cells:
+                _set_cell_borders(cell, visible=False)
+                _set_cell_padding(cell, 0)
             footer_text = str(branding.get("footer_text") or "").strip()
-            if footer_text:
-                footer.add_run(f"{footer_text}  ·  ")
-            _page_field(footer)
+            footer_values = [footer_text, "", ""]
+            for index, cell in enumerate(footer_table.rows[0].cells):
+                paragraph = cell.paragraphs[0]
+                paragraph.alignment = (WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.RIGHT)[index]
+                if footer_values[index]:
+                    paragraph.add_run(footer_values[index])
+                if index == 1:
+                    _page_field(paragraph)
             return
         header = section.header.paragraphs[0]
         header.clear()
@@ -659,6 +673,8 @@ class PaperDocumentRenderer:
                 str(layout.get("header_center") or branding.get("header_text") or branding.get("institution_name") or ""),
                 str(layout.get("header_right") or ""),
             ]
+            if _GENERIC_PAPER_HEADER_RE.match(header_values[1]):
+                header_values[1] = str(branding.get("institution_name") or "").strip()
             # Paper export Marks/Time are the single source of truth (rendered in
             # the title block).  Clear any legacy header slots that duplicate them
             # so a saved "Marks : 150 / Time : ..." preset does not produce the
@@ -712,18 +728,27 @@ class PaperDocumentRenderer:
         footer = section.footer.paragraphs[0]
         footer.clear()
         if layout.get("footer_enabled", True):
+            if layout.get("divider_enabled", True):
+                footer.paragraph_format.space_after = Pt(1)
+                PaperDocumentRenderer._set_paragraph_border(footer, str(layout.get("divider_color") or "222222"))
             footer_table = section.footer.add_table(rows=1, cols=3, width=section.page_width - section.left_margin - section.right_margin)
             for cell in footer_table.rows[0].cells:
                 _set_cell_borders(cell, visible=False)
                 _set_cell_padding(cell, 0)
-            values = [str(layout.get("footer_left") or ""), str(layout.get("footer_center") or branding.get("footer_text") or ""), str(layout.get("footer_right") or "")]
-            page_position = str(layout.get("page_number_position") or "center")
+            # Keep the page number truly centered.  Older templates put a
+            # tagline beside it in the center cell; carry that copy to the
+            # left slot, where footer details such as a website belong.
+            values = [
+                str(layout.get("footer_left") or layout.get("footer_center") or branding.get("footer_text") or ""),
+                "",
+                str(layout.get("footer_right") or ""),
+            ]
             for index, cell in enumerate(footer_table.rows[0].cells):
                 paragraph = cell.paragraphs[0]
                 paragraph.alignment = (WD_ALIGN_PARAGRAPH.LEFT, WD_ALIGN_PARAGRAPH.CENTER, WD_ALIGN_PARAGRAPH.RIGHT)[index]
                 if values[index]:
-                    paragraph.add_run(values[index] + ("  ·  " if page_position == ("left", "center", "right")[index] else ""))
-                if page_position == ("left", "center", "right")[index]:
+                    paragraph.add_run(values[index])
+                if index == 1:
                     _page_field(paragraph)
 
     @staticmethod
@@ -958,7 +983,10 @@ class PaperDocumentRenderer:
     def _latex_source(self, paper: dict[str, Any], variant: ExportVariant) -> str:
         branding = paper.get("branding_config") or {}
         layout = branding.get("layout") if isinstance(branding.get("layout"), dict) else {}
-        header_text = self._latex_escape(str(branding.get("header_text") or branding.get("institution_name") or ""))
+        raw_header_text = str(branding.get("header_text") or "").strip()
+        if _GENERIC_PAPER_HEADER_RE.match(raw_header_text):
+            raw_header_text = ""
+        header_text = self._latex_escape(raw_header_text or str(branding.get("institution_name") or ""))
         footer_text = self._latex_escape(str(branding.get("footer_text") or "").strip())
         raw_header_left = str(layout.get("header_left") or "")
         raw_header_center = str(layout.get("header_center") or "")
@@ -975,9 +1003,11 @@ class PaperDocumentRenderer:
                 raw_header_center = ""
         header_left = self._latex_escape(raw_header_left)
         header_center = self._latex_escape(raw_header_center) or header_text
+        if _GENERIC_PAPER_HEADER_RE.match(raw_header_center):
+            header_center = self._latex_escape(str(branding.get("institution_name") or ""))
         header_right = self._latex_escape(raw_header_right)
-        footer_left = self._latex_escape(str(layout.get("footer_left") or ""))
-        footer_center = self._latex_escape(str(layout.get("footer_center") or "")) or footer_text
+        footer_left = self._latex_escape(str(layout.get("footer_left") or layout.get("footer_center") or "")) or footer_text
+        footer_center = ""
         footer_right = self._latex_escape(str(layout.get("footer_right") or ""))
         watermark = self._latex_escape(str(branding.get("watermark_text") or "").strip())
         logo_path = branding.get("_latex_logo_path")
@@ -1017,10 +1047,11 @@ class PaperDocumentRenderer:
             rf"\fancyhead[L]{{\footnotesize {{{header_left}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[L]{}",
             rf"\fancyhead[C]{{\footnotesize {{{header_center}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[C]{}",
             rf"\fancyhead[R]{{\footnotesize {{{header_right}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[R]{}",
-            rf"\fancyfoot[L]{{\footnotesize {footer_left + (r'  $\cdot$  Page \thepage' if layout.get('page_number_position') == 'left' else '')}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[L]{}",
-            rf"\fancyfoot[C]{{\footnotesize {footer_center + (r'  $\cdot$  Page \thepage' if layout.get('page_number_position', 'center') == 'center' else '')}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[C]{}",
-            rf"\fancyfoot[R]{{\footnotesize {footer_right + (r'  $\cdot$  Page \thepage' if layout.get('page_number_position') == 'right' else '')}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[R]{}",
+            rf"\fancyfoot[L]{{\footnotesize {footer_left}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[L]{}",
+            r"\fancyfoot[C]{\footnotesize Page \thepage}" if layout.get("footer_enabled", True) else r"\fancyfoot[C]{}",
+            rf"\fancyfoot[R]{{\footnotesize {footer_right}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[R]{}",
             r"\renewcommand{\headrulewidth}{0.4pt}" if layout.get("divider_enabled", True) else r"\renewcommand{\headrulewidth}{0pt}",
+            r"\renewcommand{\footrulewidth}{0.4pt}" if layout.get("divider_enabled", True) else r"\renewcommand{\footrulewidth}{0pt}",
             rf"\SetWatermarkText{{{watermark}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkText{}",
             rf"\SetWatermarkScale{{{float(layout.get('watermark_size') or 1.4)}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkScale{1}",
             rf"\SetWatermarkAngle{{{int(layout.get('watermark_rotation') or 45)}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkAngle{45}",
