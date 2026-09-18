@@ -8,7 +8,7 @@ import { Button, Field, Input, Textarea } from "@/components/ui";
 import { Dialog } from "@/components/dialog";
 import s from "@/styles/ui.module.css";
 
-export function ReferenceReadyReckoner({ open, onClose }: { open: boolean; onClose: () => void }) {
+export function ReferenceReadyReckoner({ open, onClose, onSubmissionChange }: { open: boolean; onClose: () => void; onSubmissionChange?: (submitting: boolean) => void }) {
   const router = useRouter();
   const { refresh, toast } = useWorkspace();
   const [submitting, setSubmitting] = useState(false);
@@ -50,8 +50,11 @@ export function ReferenceReadyReckoner({ open, onClose }: { open: boolean; onClo
       return;
     }
     try {
-      const paper = await api.createReferencePaper(fd);
+      // Extraction can take a while. Close the dialog once the submission is
+      // underway so the dashboard can show the activity instead.
+      onSubmissionChange?.(true);
       onClose();
+      const paper = await api.createReferencePaper(fd);
       await refresh();
       toast(`Reference generation queued for "${paper.title}" — ${count} questions. Track in Live activity.`);
       router.push(`/papers/${paper.id}`);
@@ -59,6 +62,7 @@ export function ReferenceReadyReckoner({ open, onClose }: { open: boolean; onClo
       toast(caught instanceof Error ? caught.message : "Reference generation failed.", "error");
     } finally {
       setSubmitting(false);
+      onSubmissionChange?.(false);
     }
   }
 
