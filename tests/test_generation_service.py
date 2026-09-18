@@ -181,12 +181,20 @@ class GenerationServiceTests(unittest.TestCase):
 
     def test_repairs_latex_commands_decoded_as_json_control_characters(self) -> None:
         repaired = repair_decoded_latex_escapes(
-            {"solution": "Use \frac{1}{2}, \tan x, \begin{aligned}x\right, and \asqrt{2}."}
+            {"solution": "Use \frac{1}{2}, \tan x, \begin{aligned}x\right, \binom{8}{4}, and \asqrt{2}."}
         )
         self.assertEqual(
             repaired["solution"],
-            r"Use \frac{1}{2}, \tan x, \begin{aligned}x\right, and \sqrt{2}.",
+            r"Use \frac{1}{2}, \tan x, \begin{aligned}x\right, \binom{8}{4}, and \sqrt{2}.",
         )
+
+    def test_removes_actual_and_literal_nul_latex_sentinels(self) -> None:
+        repaired = repair_decoded_latex_escapes({"stem": "\x00\\(S\\u0000\\text{ value}\\)"})
+        self.assertEqual(repaired["stem"], r"\(S\text{ value}\)")
+
+    def test_repairs_other_control_prefixed_latex_commands(self) -> None:
+        repaired = repair_decoded_latex_escapes({"stem": "\x0bcdots \x01alpha \x1cpi"})
+        self.assertEqual(repaired["stem"], r"\cdots \alpha \pi")
 
     def test_parses_json_wrapped_in_provider_preamble_and_code_fence(self) -> None:
         response = parse_model_json("I have formatted the result." + "\n" + "```JSON" + "\n" + '{"questions": []}' + "\n```")

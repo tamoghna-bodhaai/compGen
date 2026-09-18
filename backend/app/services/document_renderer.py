@@ -432,7 +432,14 @@ def _append_latex_content(paragraph: Any, value: str, *, math_size: Pt | None = 
             _append_omml(paragraph, content)
 
 
-def _add_mixed_paragraphs(container: Any, value: str, *, style: Any = None, centered_display: bool = True) -> list[Any]:
+def _add_mixed_paragraphs(
+    container: Any,
+    value: str,
+    *,
+    style: Any = None,
+    centered_display: bool = True,
+    prefix: str = "",
+) -> list[Any]:
     """Add prose with display equations on centred lines, like KaTeX output.
 
     Returns the created paragraphs so callers can style them further.
@@ -444,6 +451,8 @@ def _add_mixed_paragraphs(container: Any, value: str, *, style: Any = None, cent
         current = container.paragraphs[0] if container.paragraphs else container.add_paragraph(style=style)
         current.text = ""
     paragraphs.append(current)
+    if prefix:
+        current.add_run(prefix)
     for kind, content in _split_math_segments(value):
         if not content:
             continue
@@ -461,6 +470,42 @@ def _add_mixed_paragraphs(container: Any, value: str, *, style: Any = None, cent
             if text:
                 current.add_run(text)
     return paragraphs
+
+
+def _solution_step_lines(value: str) -> list[str]:
+    """Return the authored working lines of a solution without flattening them.
+
+    Generated solutions deliberately use newlines to distinguish a substitution,
+    simplification, conclusion, and so on.  Normal prose rendering collapses
+    that whitespace, which makes an otherwise worked solution appear as one
+    dense paragraph in the answer-key export.
+    """
+    return [line.strip() for line in _normalize_latex(value).splitlines() if line.strip()]
+
+
+def _append_solution_steps(doc: Document, number: int, value: str) -> None:
+    """Add a numbered solution with one Word paragraph per authored step."""
+    steps = _solution_step_lines(value) or [_normalize_latex(value).strip()]
+    for step_index, step in enumerate(steps):
+        segments = _split_math_segments(step)
+        if len(segments) == 1 and segments[0][0] == "display":
+            display = doc.add_paragraph()
+            display.alignment = WD_ALIGN_PARAGRAPH.CENTER
+            display.paragraph_format.space_after = Pt(2)
+            _append_omml(display, segments[0][1].strip())
+            continue
+        paragraphs = _add_mixed_paragraphs(doc, step, style="Normal", prefix=f"{number}. " if step_index == 0 else "")
+        for paragraph in paragraphs:
+            paragraph.paragraph_format.left_indent = Inches(0.22)
+            paragraph.paragraph_format.space_after = Pt(2)
+        first = paragraphs[0]
+        if step_index == 0:
+            first.paragraph_format.first_line_indent = Inches(-0.22)
+
+
+def _latex_solution_steps(value: str) -> str:
+    """Preserve solution line breaks as paragraph breaks in the PDF export."""
+    return r"\par ".join(_solution_step_lines(value) or [_normalize_latex(value).strip()])
 
 
 def _plain_length(value: str) -> int:
@@ -915,9 +960,7 @@ class PaperDocumentRenderer:
             doc.add_paragraph("Solutions", style="Heading 1")
             for number, question in enumerate(paper["questions"], start=1):
                 if question.get("solution"):
-                    solution = doc.add_paragraph()
-                    solution.add_run(f"{number}. ")
-                    _append_latex_content(solution, str(question["solution"]))
+                    _append_solution_steps(doc, number, str(question["solution"]))
 
     @staticmethod
     def _latex_escape(value: str) -> str:
@@ -1086,7 +1129,7 @@ class PaperDocumentRenderer:
                 lines.append(r"\begin{enumerate}")
                 for number, question in enumerate(paper["questions"], start=1):
                     if question.get("solution"):
-                        lines.append(rf"\item {self._latex_math(question['solution'])}")
+                        lines.append(rf"\item {_latex_solution_steps(str(question['solution']))}")
                 lines.append(r"\end{enumerate}")
             lines.append(r"\end{document}")
             return "\n".join(lines)

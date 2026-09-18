@@ -7,7 +7,7 @@ SYSTEM_PROMPT = """You are a meticulous JEE Mathematics solution writer. Indepen
 def build_prompt(*, question: dict, exam: str, subject: str) -> str:
     return f"""Write the answer and worked solution for this {exam} {subject} question.
 
-Do not assume any existing answer key is correct. Derive the answer independently. Every mathematical expression—including substitutions, equations, intervals, trigonometric terms, and the final value—must be enclosed in literal $...$ (inline) or $$...$$ (display) delimiters. Never emit bare LaTeX commands or unwrapped mathematical notation. Use valid LaTeX commands with single backslashes, escaped correctly for JSON. For a single-correct MCQ, return the correct option letter when it can be determined; otherwise return null. Keep the solution appropriate for a student answer key.
+Do not assume any existing answer key is correct. Derive the answer independently. Write the worked solution as clear, logical steps: put each material step on its own line, and put standalone calculations or transformations in $$...$$ display delimiters on their own line. Every mathematical expression—including substitutions, equations, intervals, trigonometric terms, and the final value—must be enclosed in literal $...$ (inline) or $$...$$ (display) delimiters. Never emit bare LaTeX commands or unwrapped mathematical notation. Use valid LaTeX commands with single backslashes, escaped correctly for JSON. For a single-correct MCQ, return the correct option letter when it can be determined; otherwise return null. Keep the solution appropriate for a student answer key.
 
 Question:
 {question}

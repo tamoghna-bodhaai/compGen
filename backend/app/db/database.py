@@ -129,6 +129,10 @@ CREATE TABLE IF NOT EXISTS paper_questions (
     updated_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS paper_questions_position_idx ON paper_questions (paper_id, section_id, position);
+CREATE TABLE IF NOT EXISTS app_migrations (
+    name TEXT PRIMARY KEY,
+    applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 """
 
 
@@ -137,6 +141,23 @@ def database_path() -> Path:
     if configured.startswith("sqlite:///"):
         return Path(configured.removeprefix("sqlite:///"))
     return DEFAULT_DATABASE_PATH
+
+
+def _repair_persisted_latex(connection: sqlite3.Connection) -> None:
+    """Repair legacy model output once, including nested question payloads."""
+    from app.services.openrouter import repair_decoded_latex_escapes
+
+    for table in ("questions", "paper_questions"):
+        rows = connection.execute(f"SELECT id, question_json, solution FROM {table}").fetchall()
+        for identifier, question_json, solution in rows:
+            payload = json.loads(question_json)
+            repaired_payload = repair_decoded_latex_escapes(payload)
+            repaired_solution = repair_decoded_latex_escapes(solution) if solution is not None else None
+            if repaired_payload != payload or repaired_solution != solution:
+                connection.execute(
+                    f"UPDATE {table} SET question_json = ?, solution = ? WHERE id = ?",
+                    (json.dumps(repaired_payload), repaired_solution, identifier),
+                )
 
 
 def initialize_database(path: Path | None = None) -> Path:
@@ -157,6 +178,11 @@ def initialize_database(path: Path | None = None) -> Path:
         paper_columns = {row[1] for row in connection.execute("PRAGMA table_info(papers)")}
         if "branding_template_id" not in paper_columns:
             connection.execute("ALTER TABLE papers ADD COLUMN branding_template_id TEXT")
+        migration_name = "repair_persisted_latex_controls_v2"
+        applied = connection.execute("SELECT 1 FROM app_migrations WHERE name = ?", (migration_name,)).fetchone()
+        if applied is None:
+            _repair_persisted_latex(connection)
+            connection.execute("INSERT INTO app_migrations (name) VALUES (?)", (migration_name,))
     return target
 
 

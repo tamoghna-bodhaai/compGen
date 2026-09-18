@@ -1,12 +1,14 @@
 .env
+.env.local
 .venv/
 __pycache__/
 *.py[cod]
 .pytest_cache/
 backend/data/
-data/*.db
-output/
 tmp/
+output/**/*.aux
+output/**/*.log
+output/**/*.out
 node_modules/
 .next/
 *.tsbuildinfo

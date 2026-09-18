@@ -1,0 +1,485 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=19mm,top=17mm,bottom=17mm]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathptmx}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{array,tabularx,booktabs}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}
+\setlist[enumerate,1]{leftmargin=1.1em,itemsep=3pt,parsep=2pt}
+\setlist[itemize]{leftmargin=1.4em,itemsep=1pt}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[C]{\footnotesize \textbf{Question Paper}}
+\fancyfoot[C]{\footnotesize Page \thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\begin{document}
+\vspace{2mm}
+\noindent \textbf{Marks : 67} \hfill \textbf{Time : 2 : 30 hours}
+\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}
+{\centering \Large \textbf{DEFINITE INTEGRALS UNIT TEST --- ANSWER KEY}\par}
+{\centering JEE $|$ Mathematics\par}
+\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}
+\vspace{1mm}
+\noindent \textbf{Duration:} Not specified \quad \textbf{Total Marks:} 67 \quad \textbf{Questions:} 25\par
+\vspace{2mm}
+
+\section*{Answer Key}
+\noindent\begin{tabularx}{\linewidth}{|c|c|c|X|}\hline
+\textbf{Q} & \textbf{Answer} & \textbf{Marks} & \textbf{Concept} \\\hline
+1 & $a=\frac12$ & 1 & Symmetry of definite integrals \\\hline
+2 & $\dfrac{1}{6}$ & 4 & Symmetry and change-of-variable properties of definite integrals \\\hline
+3 & $1$ & 4 & symmetry and transformation properties of definite integrals \\\hline
+4 & $\frac12$ & 1 & Symmetry and reflection substitution in definite integrals \\\hline
+5 & $0$ & 4 & symmetry and transformation properties of definite integrals \\\hline
+6 & Every real number $\lambda$ & 1 & Symmetry and transformation properties of definite integrals \\\hline
+7 & $\frac12$ & 4 & Symmetry properties of definite integrals under reflection and change of variables \\\hline
+8 & $\frac{1}{2}$ & 4 & Symmetry and transformation properties of definite integrals \\\hline
+9 & \(J(\lambda)=\frac{1}{2}\) for every real \(\lambda\). & 4 & Symmetry and substitution properties of definite integrals \\\hline
+10 & $\frac{3}{2}$ & 1 & Symmetry and change-of-variable properties of definite integrals \\\hline
+11 & $\dfrac{1}{6}$ & 4 & Symmetry of definite integrals under reflection about the midpoint of an interval \\\hline
+12 & \(0\) & 1 & Symmetry of integrals under domain-preserving transformations \\\hline
+13 & $\dfrac{2}{3}$ & 4 & Symmetry of definite integrals via reflection and change of variables \\\hline
+14 & $4$ & 1 & Symmetry and transformation properties of definite integrals \\\hline
+15 & $\frac{1}{2}$ & 1 & Symmetry of definite integrals \\\hline
+16 & $1$ & 1 & Symmetry and substitution properties of definite integrals \\\hline
+17 & $\frac{17}{3}$ & 1 & symmetry of definite integrals under reflection and change of variables \\\hline
+18 & $0$ & 4 & Symmetry of definite integrals under reflection of the interval \\\hline
+19 & \(k=0\) & 4 & Symmetry and transformation properties of definite integrals \\\hline
+20 & $\frac{1}{2}$ & 4 & Symmetry and change-of-variable properties of definite integrals \\\hline
+21 & $e-1$ & 4 & Symmetry and transformation properties of definite integrals \\\hline
+22 & $\frac{1}{12}$ & 4 & Symmetry and transformation properties of definite integrals \\\hline
+23 & $1-\dfrac{1}{\sqrt[3]{2}}$ & 4 & symmetry of definite integrals under affine reflection \\\hline
+24 & $\frac{1}{2}$ & 1 & Symmetry of definite integrals under reflection about the midpoint of an interval \\\hline
+25 & $M=\dfrac{A}{2}$ & 1 & Symmetry of definite integrals under reflection, applied to weighted moments \\\hline
+\end{tabularx}
+
+\section*{Solutions}
+\begin{enumerate}
+\item The interval $[0,1]$ is symmetric about $x=\frac12$, so replacing $a$ by $1-a$ leaves the integral unchanged: $F(a)=F(1-a)$. Splitting the integral at $x=a$, we obtain
+\[
+F(a)=\int_0^a(a-x)\,dx+\int_a^1(x-a)\,dx
+=\frac{a^2}{2}+\frac{(1-a)^2}{2}.
+\]
+Thus,
+\[
+F(a)=a^2-a+\frac12=\left(a-\frac12\right)^2+\frac14.
+\]
+This is minimized uniquely when $a=\frac12$.
+\item Using the substitution $x=1-t$ in $J$, we obtain
+\[
+J=\int_0^1(1-2t)f(1-t)\,dt=-\int_0^1(2t-1)f(1-t)\,dt.
+\]
+Renaming $t$ as $x$ and adding this expression to the original expression for $J$ gives
+\[
+2J=\int_0^1(2x-1)\bigl[f(x)-f(1-x)\bigr]dx.
+\]
+By the given condition,
+\[
+2J=\int_0^1(2x-1)^2dx
+=\int_0^1(4x^2-4x+1)dx
+=\frac{1}{3}.
+\]
+Therefore,
+\[
+J=\frac{1}{6}.
+\]
+\item For $x\in(0,1]$, we have
+\[
+\frac{x^{-a}}{1+x^{-a}}=\frac{1}{1+x^a}=1-\frac{x^a}{1+x^a}.
+\]
+Hence, by the complementary-argument relation,
+\[
+F(-a)=1-F(a),
+\]
+and therefore
+\[
+F(a)-F(-a)=2F(a)-1.
+\]
+Now, for $a=1$,
+\[
+F(1)=\int_0^1\frac{x}{1+x}\,dx
+=\int_0^1\left(1-\frac1{1+x}\right)dx
+=1-\ln2.
+\]
+Thus
+\[
+F(1)-F(-1)=2(1-\ln2)-1=1-2\ln2.
+\]
+Also, $F(a)$ is strictly decreasing for $a>0$, since $x^a$ strictly decreases with $a$ for every $x\in(0,1)$. Consequently, $F(a)-F(-a)=2F(a)-1$ is strictly decreasing, so the solution is unique. Therefore, $\boxed{a=1}$.
+
+\item Let $w(x)=\frac{1}{1+x(1-x)}$. Since $w(1-x)=w(x)$, the substitution $x=1-t$ gives
+\[
+F(c)=\int_0^1 w(t)|1-t-c|\,dt=\int_0^1 w(t)|t-(1-c)|\,dt=F(1-c).
+\]
+Thus, $F$ is symmetric about $c=\frac12$.
+
+For each fixed $x$, the function $|x-c|$ is convex in $c$. Since $w(x)>0$, the integral $F(c)$ is convex on $[0,1]$. Therefore, by symmetry and convexity,
+\[
+F\left(\frac12\right)=F\left(\frac{c+(1-c)}2\right)\le \frac{F(c)+F(1-c)}2=F(c).
+\]
+Hence the minimum occurs at $c=\frac12$. The strict positivity of the weight makes the minimizer unique.
+\item Using the substitution $x\mapsto \pi-x$ in $I(k)$, we have $\sin(\pi-x)=\sin x$ and $\cos(\pi-x)=-\cos x$, so $I(k)=I(-k)$. More directly, adding the two integrals gives
+\[
+I(k)+I(-k)=\int_0^\pi \sin x\left(\frac{1}{1+k\cos x}+\frac{1}{1-k\cos x}\right)dx
+=\int_0^\pi \frac{2\sin x}{1-k^2\cos^2x}\,dx.
+\]
+Since $|k|<1$, we have $0<1-k^2\cos^2x\le 1$, and hence
+\[
+\frac{2\sin x}{1-k^2\cos^2x}\ge 2\sin x.
+\]
+Therefore,
+\[
+I(k)+I(-k)\ge \int_0^\pi 2\sin x\,dx=4.
+\]
+Equality can hold only when $k^2\cos^2x=0$ throughout the interval, which requires $k=0$. Indeed, for $k=0$, $I(0)+I(-0)=2\int_0^\pi\sin x\,dx=4$. Thus the unique admissible value is
+\[
+\boxed{k=0}.
+\]
+\item For $f_\lambda(x)=\frac{e^{\lambda x}}{e^{\lambda x}+e^{\lambda(1-x)}}$, substitute $x\mapsto 1-x$. Since the interval $[0,1]$ remains unchanged, we obtain
+\[
+I(\lambda)=\int_0^1\frac{e^{\lambda(1-x)}}{e^{\lambda(1-x)}+e^{\lambda x}}\,dx.
+\]
+Adding this expression to the original integral gives
+\[
+2I(\lambda)=\int_0^1\left[\frac{e^{\lambda x}}{e^{\lambda x}+e^{\lambda(1-x)}}+\frac{e^{\lambda(1-x)}}{e^{\lambda(1-x)}+e^{\lambda x}}\right]dx
+=\int_0^1 1\,dx=1.
+\]
+Hence $I(\lambda)=\frac12$. The denominator is strictly positive for every real $\lambda$ and every $x\in[0,1]$, including $\lambda=0$. Therefore, the condition holds for every real $\lambda$.
+\item Under the substitution $x=1-u$, we have
+\[
+\left(1-u-\frac12\right)g(1-u)=-\left(u-\frac12\right)g(u),
+\]
+so the integrand is antisymmetric about $x=\frac12$. Also,
+\[
+\int_0^1\left(x-\frac12\right)g(x)\,dx=0.
+\]
+Hence
+\[
+F(1-t)=F(t),
+\]
+which expresses equality of the reflected accumulated signed contributions.
+
+Since $g(x)>0$, we have $F'(t)=\left(t-\frac12\right)g(t)<0$ for $0<t<\frac12$ and $F'(t)>0$ for $\frac12<t<1$. Therefore, $F$ decreases up to $t=\frac12$ and increases thereafter. Moreover, $F(0)=F(1)=0$, so $F$ has a unique minimum, and thus $|F(t)|$ has a unique maximum, at
+\[
+\boxed{t=\frac12}.
+\]
+\item Integrating the given relation from $0$ to $1$, we get
+\[
+\int_0^1 f(x)\,dx+\int_0^1 f(1-x)\,dx=\int_0^1 x(1-x)\,dx+\int_0^1 k\,dx.
+\]
+Using the substitution $u=1-x$ in the second integral,
+\[
+\int_0^1 f(1-x)\,dx=\int_0^1 f(u)\,du=\frac{1}{3}.
+\]
+Therefore,
+\[
+2\left(\frac{1}{3}\right)=\int_0^1(x-x^2)\,dx+k
+=\left[\frac{x^2}{2}-\frac{x^3}{3}\right]_0^1+k
+=\frac{1}{6}+k.
+\]
+Hence,
+\[
+k=\frac{2}{3}-\frac{1}{6}=\frac{1}{2}.
+\]
+\item Let \(x=1-t\). Since the interval \([0,1]\) remains unchanged, we obtain
+\[
+J(\lambda)=\int_0^1\frac{e^{\lambda(1-t)}}{e^{\lambda(1-t)}+e^{\lambda t}}\,dt.
+\]
+Adding this expression to the original one gives
+\[
+2J(\lambda)=\int_0^1\left(\frac{e^{\lambda t}}{e^{\lambda t}+e^{\lambda(1-t)}}+\frac{e^{\lambda(1-t)}}{e^{\lambda(1-t)}+e^{\lambda t}}\right)dt.
+\]
+The two fractions add to \(1\), so
+\[
+2J(\lambda)=\int_0^1 1\,dt=1.
+\]
+Therefore, \(J(\lambda)=\frac12\), independent of the real parameter \(\lambda\). The denominator is always positive because it is a sum of two positive exponentials.
+\item Using the substitution $x=\frac1t$, we have
+\[
+\int_{1/2}^{2}\frac{f(x)}{x}\,dx=\int_{1/2}^{2}\frac{f(1/t)}{t}\,dt.
+\]
+Renaming $t$ as $x$, this gives
+\[
+I=\int_{1/2}^{2}\frac{f(1/x)}{x}\,dx.
+\]
+Adding this to the original expression for $I$,
+\[
+2I=\int_{1/2}^{2}\frac{f(x)+f(1/x)}{x}\,dx
+=\int_{1/2}^{2}\frac{x+1/x}{x}\,dx.
+\]
+Therefore,
+\[
+2I=\int_{1/2}^{2}\left(1+\frac1{x^2}\right)dx
+=\left[x-\frac1x\right]_{1/2}^{2}
+=\left(2-\frac12\right)-\left(\frac12-2\right)=3.
+\]
+Hence,
+\[
+I=\frac32.
+\]
+\item Using the substitution $x\mapsto 1-x$ in $I$, we get
+\[
+I=\int_0^1(2(1-x)-1)f(1-x)\,dx=-\int_0^1(2x-1)f(1-x)\,dx.
+\]
+Adding this to the original expression for $I$ gives
+\[
+2I=\int_0^1(2x-1)\bigl[f(x)-f(1-x)\bigr]dx.
+\]
+Using the given relation,
+\[
+2I=\int_0^1(2x-1)^2dx
+=\int_0^1(4x^2-4x+1)dx
+=\frac{1}{3}.
+\]
+Therefore,
+\[
+I=\frac{1}{6}.
+\]
+\item The region \(D\) is symmetric about the \(y\)-axis: if \((x,y)\in D\), then \((-x,y)\in D\) as well. Under the reflection \((x,y)\mapsto(-x,y)\), the integrand becomes
+\[
+\frac{-x}{1+(-x)^2+y^2}=-\frac{x}{1+x^2+y^2}.
+\]
+Thus the integrand is odd with respect to \(x\), while the domain is symmetric under \(x\mapsto -x\). Contributions from corresponding points cancel pairwise. Therefore,
+\[
+J=0.
+\]
+\item Let
+\[
+I=\int_0^2 (x-1)f(x)\,dx.
+\]
+Using the substitution $x=2-t$, we get
+\[
+I=\int_0^2 (1-t)f(2-t)\,dt=-\int_0^2 (t-1)f(2-t)\,dt.
+\]
+Renaming $t$ as $x$ and adding this equation to the original expression for $I$,
+\[
+2I=\int_0^2 (x-1)\bigl[f(x)-f(2-x)\bigr]dx.
+\]
+Using the given relation,
+\[
+2I=\int_0^2 (x-1)(2x-2)\,dx=2\int_0^2 (x-1)^2\,dx.
+\]
+Now,
+\[
+\int_0^2 (x-1)^2\,dx=\int_{-1}^{1}u^2\,du=\frac{2}{3}.
+\]
+Therefore,
+\[
+2I=\frac{4}{3}\quad\Longrightarrow\quad I=\frac{2}{3}.
+\]
+\item Under the reflection $x\mapsto 2-x$, the interval $[0,2]$ remains unchanged. Adding the integrands gives
+$$f_k(x)+f_k(2-x)=(kx-1)+\bigl(k(2-x)-1\bigr)=2k-2.$$
+Therefore,
+$$\int_0^2 f_k(x)\,dx+\int_0^2 f_k(2-x)\,dx=\int_0^2(2k-2)\,dx=2(2k-2)=4k-4.$$
+Using the given condition,
+$$4k-4=12\implies 4k=16\implies k=4.$$
+Hence, the required value is $\boxed{4}$, which satisfies the original integral condition.
+\item Denote the integral by $I$. Using the substitution $x=\frac{\pi}{2}-t$, we obtain
+$$I=\int_{0}^{\pi/2}\frac{\cos t+a\sin t}{\sin t+\cos t}\,dt.$$
+Adding this expression to the original one gives
+$$2I=\int_{0}^{\pi/2}\frac{(\sin t+a\cos t)+(\cos t+a\sin t)}{\sin t+\cos t}\,dt.$$
+The numerator simplifies to $(1+a)(\sin t+\cos t)$, so
+$$2I=(1+a)\int_{0}^{\pi/2}dt=(1+a)\frac{\pi}{2}.$$
+Hence
+$$I=\frac{(1+a)\pi}{4}.$$
+Using $I=\frac{3\pi}{8}$, we get
+$$\frac{(1+a)\pi}{4}=\frac{3\pi}{8}\implies 1+a=\frac{3}{2}\implies a=\frac{1}{2}.$$
+\item Using the substitution $u=1-x$ in $R(\lambda)$, we get
+\[
+R(\lambda)=\int_0^1\bigl(\lambda u+1\bigr)f(1-u)\,du.
+\]
+Therefore,
+\[
+J(\lambda)+R(\lambda)
+=\int_0^1(\lambda u+1)\bigl[f(u)+f(1-u)\bigr]du.
+\]
+Using the given relation,
+\[
+J(\lambda)+R(\lambda)=\int_0^1(\lambda u+1)\bigl(2u(1-u)+1\bigr)du.
+\]
+Now,
+\[
+\int_0^1\bigl(2u(1-u)+1\bigr)du=\frac43,
+\]
+and
+\[
+\int_0^1u\bigl(2u(1-u)+1\bigr)du=\frac23.
+\]
+Hence,
+\[
+J(\lambda)+R(\lambda)=\lambda\cdot\frac23+\frac43.
+\]
+Given that this equals $2$,
+\[
+\frac{2\lambda}{3}+\frac43=2
+\quad\Longrightarrow\quad
+2\lambda=2
+\quad\Longrightarrow\quad
+\lambda=1.
+\]
+\item Let $A=\int_0^2 g(x)\,dx=5$ and $M=\int_0^2 xg(x)\,dx$. Multiplying the given relation by $x$ and integrating from $0$ to $2$, we get
+\[
+M-\int_0^2 xg(2-x)\,dx=\int_0^2(2x^2-2x)\,dx.
+\]
+Using $u=2-x$ in the reflected integral,
+\[
+\int_0^2 xg(2-x)\,dx=\int_0^2(2-u)g(u)\,du=2A-M.
+\]
+Also,
+\[
+\int_0^2(2x^2-2x)\,dx=2\cdot\frac{8}{3}-2\cdot2=\frac{4}{3}.
+\]
+Therefore,
+\[
+M-(2A-M)=\frac{4}{3}\implies 2M-2A=\frac{4}{3}.
+\]
+Since $A=5$, we obtain
+\[
+M=5+\frac{2}{3}=\frac{17}{3}.
+\]
+\item Let $A=\int_0^1 f(x)\,dx$ and $J=\int_0^1 x(1-x)f(x)\,dx$. Since $f(x)=f(1-x)$, we have
+\[
+\int_0^1 xf(x)\,dx=\int_0^1(1-x)f(x)\,dx=\frac{A}{2}.
+\]
+Also,
+\[
+\lambda x^2+(1-\lambda)x=\lambda\bigl(x^2-x\bigr)+x=\frac{x+(1-x)}{2}-\lambda x(1-x).
+\]
+Therefore,
+\[
+I_\lambda=\frac{A}{2}-\lambda J.
+\]
+The quantity $J$ is not determined by $A$ alone, so the integral depends only on the known value $A$ precisely when $\lambda=0$. In that case,
+\[
+I_0=\int_0^1 xf(x)\,dx=\frac{A}{2}=4.
+\]
+Hence, the required parameter is $\boxed{0}$ (and the corresponding integral equals $4$).
+\item For every real \(k\), both integrands are bounded near \(x=0\): if \(k\ge 0\), this is immediate, while if \(k<0\), \(\frac{x^k}{1+x^k}\to 1\) and \(\frac{1}{1+x^k}\to 0\). Hence both integrals converge. Let
+\[
+A=\int_0^1\frac{x^k}{1+x^k}\,dx,\qquad B=\int_0^1\frac{1}{1+x^k}\,dx.
+\]
+Since the integrands are complementary,
+\[
+A+B=\int_0^1 1\,dx=1.
+\]
+The given condition \(A=B\) therefore implies \(A=B=\frac12\). If \(k>0\), then \(0<x^k<1\) for \(0<x<1\), so \(A<B\). If \(k<0\), then \(x^k>1\), so \(A>B\). Thus equality is possible only when \(k=0\). Indeed, for \(k=0\), both integrals equal \(\frac12\).
+\item Let
+\[
+I(a)=\int_{0}^{1}\frac{x^{a}}{x^{a}+(1-x)^{a}}\,dx.
+\]
+Using the substitution $x=1-t$, we obtain
+\[
+I(a)=\int_{0}^{1}\frac{(1-t)^{a}}{t^{a}+(1-t)^{a}}\,dt.
+\]
+Adding this expression to the original one gives
+\[
+2I(a)=\int_{0}^{1}\left[\frac{x^{a}}{x^{a}+(1-x)^{a}}+\frac{(1-x)^{a}}{x^{a}+(1-x)^{a}}\right]dx.
+\]
+The sum of the numerators equals the denominator, so
+\[
+2I(a)=\int_{0}^{1}1\,dx=1.
+\]
+Therefore,
+\[
+I(a)=\frac{1}{2},
+\]
+which is independent of the positive parameter $a$.
+\item Integrating the given relation from $0$ to $1$, we get
+\[
+\int_0^1 f(x)\,dx+\int_0^1 f(1-x)\,dx
+=\int_0^1\left(e^x+e^{1-x}\right)dx.
+\]
+Using the substitution $u=1-x$ in the second integral on the left,
+\[
+\int_0^1 f(1-x)\,dx=\int_0^1 f(u)\,du.
+\]
+Hence, if $I=\int_0^1 f(x)\,dx$, then
+\[
+2I=\int_0^1 e^x\,dx+\int_0^1 e^{1-x}\,dx.
+\]
+Now,
+\[
+\int_0^1 e^x\,dx=e-1,
+\qquad
+\int_0^1 e^{1-x}\,dx=e-1.
+\]
+Therefore,
+\[
+2I=2(e-1)\quad\Longrightarrow\quad I=e-1.
+\]
+Thus, the correct option is $e-1$.
+\item Let $I=\int_0^1 f(x)\,dx$. Using the substitution $x=1-t$, we get
+\[
+I=\int_0^1 f(1-x)\,dx.
+\]
+Therefore,
+\[
+2I=\int_0^1\bigl[f(x)+f(1-x)\bigr]dx
+=\int_0^1 x(1-x)\,dx.
+\]
+Now,
+\[
+\int_0^1 x(1-x)\,dx=\int_0^1(x-x^2)\,dx
+=\frac12-\frac13=\frac16.
+\]
+Hence,
+\[
+I=\frac12\cdot\frac16=\frac1{12}.
+\]
+\item Pair the portions on either side of $x=t$ by writing $x=t-u$ on $[0,t]$ and $x=t+u$ on $[t,1]$. Then
+\[
+A(t)=\int_0^t u(1-u)\,du+\int_0^{1-t}u(1+u)\,du.
+\]
+Therefore,
+\[
+A(t)=\frac{t^2}{2}-\frac{t^3}{3}+\frac{(1-t)^2}{2}+\frac{(1-t)^3}{3}
+=\frac56-2t+2t^2-\frac23t^3.
+\]
+Using $A(t)=\frac12$ gives
+\[
+\frac56-2t+2t^2-\frac23t^3=\frac12,
+\]
+which simplifies to
+\[
+2t^3-6t^2+6t-1=0
+\quad\Longleftrightarrow\quad
+2(t-1)^3+1=0.
+\]
+Hence
+\[
+t=1-\frac{1}{\sqrt[3]{2}}.
+\]
+Also, $A'(t)=-2(1-t)^2<0$ on $[0,\frac12]$, so this solution is unique in the specified interval.
+\item Let
+\[
+I=\int_0^1\frac{h(x)}{h(x)+h(1-x)}\,dx.
+\]
+Using the substitution $x=1-t$, we obtain
+\[
+I=\int_0^1\frac{h(1-x)}{h(1-x)+h(x)}\,dx.
+\]
+Adding this expression to the original one gives
+\[
+2I=\int_0^1\left(\frac{h(x)}{h(x)+h(1-x)}+\frac{h(1-x)}{h(x)+h(1-x)}\right)dx
+=\int_0^1 1\,dx=1.
+\]
+Therefore,
+\[
+I=\frac12.
+\]
+\item Using the substitution $x=1-t$ in the integral defining $M$, we get
+\[
+M=\int_0^1 (1-t)f(1-t)\,dt.
+\]
+Since $f(1-t)=f(t)$ by the given symmetry,
+\[
+M=\int_0^1 (1-t)f(t)\,dt
+=\int_0^1 f(t)\,dt-\int_0^1 t f(t)\,dt=A-M.
+\]
+Therefore, $2M=A$, and hence
+\[
+\boxed{M=\frac{A}{2}}.
+\]
+\end{enumerate}
+\end{document}

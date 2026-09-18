@@ -93,6 +93,25 @@ class DocumentRendererTests(unittest.TestCase):
         self.assertAlmostEqual(question_document.sections[0].page_width, 7560000, delta=500)  # A4 width in EMU
         self.assertAlmostEqual(question_document.sections[0].page_height, 10692000, delta=500)  # A4 height in EMU
 
+    def test_answer_key_keeps_solution_working_on_separate_steps(self) -> None:
+        PaperService().add_manual_question(
+            self.paper["id"],
+            AddManualQuestionRequest(
+                question_type=QuestionType.SINGLE_CORRECT,
+                stem="Find $x$.", options=["1", "2", "3", "4"], correct_answer="B",
+                solution="Start with $2x=4$.\nDivide both sides by $2$.\n$$x=2$$\nHence, the answer is $2$.",
+                difficulty=2, marks=4, primary_concept="linear equations",
+            ),
+        )
+        paper = PaperService().get(self.paper["id"])
+        renderer = PaperDocumentRenderer(Path(self.tmp.name) / "exports")
+        path, _ = renderer.export(paper, output_format=ExportFormat.DOCX, variant=ExportVariant.ANSWER_KEY)
+        paragraphs = [paragraph.text for paragraph in Document(path).paragraphs]
+        self.assertTrue(any("Start with ." in paragraph for paragraph in paragraphs))
+        self.assertTrue(any(paragraph.startswith("Divide both sides by") for paragraph in paragraphs))
+        self.assertIn("Hence, the answer is .", paragraphs)
+        self.assertIn(r"\par Divide both sides by $2$.", renderer._latex_source(paper, ExportVariant.ANSWER_KEY))
+
     def test_export_removes_xml_invalid_characters_from_generated_content(self) -> None:
         PaperService().add_manual_question(
             self.paper["id"],

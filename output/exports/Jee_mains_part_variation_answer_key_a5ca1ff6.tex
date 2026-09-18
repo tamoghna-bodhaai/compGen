@@ -1,0 +1,130 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=19mm,top=17mm,bottom=17mm]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathptmx}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{draftwatermark}
+\usepackage{graphicx}
+\usepackage{array,tabularx,booktabs}
+\usepackage{titlesec}
+\titleformat*{\section}{\Large\mdseries}
+\titleformat*{\subsection}{\large\mdseries}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}
+\setlist[enumerate,1]{leftmargin=1.1em,itemsep=3pt,parsep=2pt}
+\setlist[itemize]{leftmargin=1.4em,itemsep=1pt}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[L]{\footnotesize {}}
+\fancyhead[C]{\footnotesize {Practice Paper}}
+\fancyhead[R]{\footnotesize {}}
+\fancyfoot[L]{\footnotesize Think C}
+\fancyfoot[C]{\footnotesize Education is not just about Information  $\cdot$  Page \thepage}
+\fancyfoot[R]{\footnotesize }
+\renewcommand{\headrulewidth}{0.4pt}
+\SetWatermarkText{ThinkC}
+\SetWatermarkScale{1.4}
+\SetWatermarkAngle{45}
+\SetWatermarkLightness{0.82}
+\begin{document}
+\vspace{2mm}
+\noindent {Marks : 100} \hfill {Time : 3 : 00 hours}
+\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}
+{\centering \Large {JEE MAINS PART VARIATION --- ANSWER KEY}\par}
+\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}
+\vspace{2mm}
+
+\section*{Answer Key}
+\noindent\begin{tabularx}{\linewidth}{|c|c|c|X|}\hline
+Q & Answer & Marks & Concept \\\hline
+1 & 137 & 4 & Coefficient comparison \\\hline
+2 & $74$ & 4 & Using a quadratic relation to determine the periodic values of powers \\\hline
+3 & $\dfrac{37}{8}$ & 4 & Second-order expansion \\\hline
+4 & $5x-4y-11=0$ & 4 & Locus by internal division and equation of a chord bisected at a given point \\\hline
+5 & \(\dfrac{16}{3}\) & 4 & Symmetry of definite integrals \\\hline
+6 & $256$ & 4 & Counting relations with prescribed properties \\\hline
+7 & 504 & 4 & Properties of GP terms \\\hline
+8 & 126 & 4 & Counting strictly increasing functions using order-preserving transformations \\\hline
+9 & $19$ & 4 & Vector triple-product constraints \\\hline
+10 & $4\pi-2$ & 4 & Area enclosed by curves \\\hline
+11 & $\frac{20}{3}$ & 4 & Conjugate relation of ellipse and hyperbola foci \\\hline
+12 & \(-8\) & 4 & Solving equations involving absolute values \\\hline
+13 & $\frac{11}{3}$ & 4 & Foot of perpendicular and scalar projection \\\hline
+14 & $\dfrac{49\sqrt{3}}{3}$ & 4 & Equilateral triangle geometry \\\hline
+\end{tabularx}
+
+\section*{Solutions}
+\begin{enumerate}
+\item Using $(1-2x)^8=1-16x+112x^2-448x^3+inom{8}{4}16x^4+cdots$, comparison of coefficients gives
+
+Coefficient of $x$: $q-16r=-20$.
+
+Coefficient of $x^2$: $p-16q+112r=0$.
+
+Coefficient of $x^3$: $-16p+112q-448r=0$.
+
+From the second equation, $p=16q-112r$. Substituting this into the third equation,
+\[
+-16(16q-112r)+112q-448r=0
+\]
+\[
+-144q+1344r=0\quad\Rightarrow\quad q=\frac{28}{3}r.
+\]
+Using $q-16r=-20$,
+\[
+\frac{28}{3}r-16r=-20\quad\Rightarrow\quad -\frac{20}{3}r=-20,
+\]
+so $r=3$, $q=28$. Therefore,
+\[
+p=16(28)-112(3)=112.
+\]
+Hence,
+\[
+p+q-r=112+28-3=137.
+\]
+\item From $x^2-x+1=0$, multiplying by $(x+1)$ gives $x^3=-1$, hence $x^6=1$. Therefore, $x^k+x^{-k}$ depends on $k\pmod 6$. In one cycle, for $k=1,2,3,4,5,6$, the values are respectively $1,-1,-2,-1,1,2$. Thus their fourth powers are $1,1,16,1,1,16$. Among $k=1$ to $14$, the values $k\equiv 0$ or $3\pmod 6$ occur for $k=3,6,9,12$, contributing $4\times16$. The remaining $10$ terms contribute $10\times1$. Hence the required sum is $4\times16+10=74$.
+\item Using the second-order expansion of $\ln f(2+x)$,
+\[
+\ln\frac{f(2+x)}{12}=\frac{f'(2)}{f(2)}x+\frac12\left(\frac{f''(2)}{f(2)}-\frac{[f'(2)]^2}{[f(2)]^2}\right)x^2+o(x^2).
+\]
+Thus,
+\[
+\ln\frac{f(2+x)}{12}=\frac{x}{4}+\frac12\left(\frac56-\frac1{16}\right)x^2+o(x^2)=\frac{x}{4}+\frac{37x^2}{96}+o(x^2).
+\]
+Therefore,
+\[
+\frac{12}{x}\ln\frac{f(2+x)}{12}-3=\frac{37}{8}x+o(x).
+\]
+Hence,
+\[
+\left(\frac{f(2+x)}{12}\right)^{12/x}e^{-3}=\exp\left(\frac{37}{8}x+o(x)\right),
+\]
+and consequently the required limit is $\dfrac{37}{8}$.
+\item Write a point $Q$ on the given parabola as $Q=(1+4t,-2+2t^2)$. Since $P$ divides $VQ$ in the ratio $2:3$, its coordinates are $P=\frac{3V+2Q}{5}$, giving $P=\left(1+\frac{8t}{5},-2+\frac{4t^2}{5}\right)$. Hence the locus $C$ is $$(x-1)^2=\frac{16}{5}(y+2),$$ or, on putting $u=x-1$ and $v=y+2$, $5u^2=16v$. Let the required chord be $v=mu+c$. Its intersection with $C$ satisfies $5u^2-16mu-16c=0$. Therefore, the midpoint of the chord has $u$-coordinate $\frac{8m}{5}$. Since its midpoint is $M=(3,1)$, we have $u_M=2$, so $\frac{8m}{5}=2$, giving $m=\frac54$. Also, $v_M=3=m(2)+c$, so $c=\frac12$. Thus $y+2=\frac54(x-1)+\frac12$, which simplifies to $\boxed{5x-4y-11=0}$.
+\item Using the sum-to-product identity, \(\sin 3x+\sin x=2\sin 2x\cos x=4\sin x\cos^2x\). Hence, \(I=4\int_{-\pi/2}^{3\pi/2}|\sin x|\cos^2x\,dx\). The integrand has period \(\pi\), so this integral over an interval of length \(2\pi\) equals twice its value over \([0,\pi]\): \(I=8\int_0^\pi \sin x\cos^2x\,dx\). Now, with \(u=\cos x\), \(du=-\sin x\,dx\), we get \(\int_0^\pi\sin x\cos^2x\,dx=\int_{-1}^{1}u^2\,du=\dfrac{2}{3}\). Therefore, \(I=8\cdot\dfrac{2}{3}=\dfrac{16}{3}\).
+\item Since $R$ is reflexive, all $5$ diagonal ordered pairs $(i,i)$ must be present. For a symmetric relation, each off-diagonal unordered pair $\{i,j\}$ can either be included completely, meaning both $(i,j)$ and $(j,i)$ are present, or excluded completely. There are $\binom{5}{2}=10$ such unordered pairs. The condition $(2,3)\in R$ fixes the pair $\{2,3\}$ as included, while $(1,2)\notin R$ fixes the pair $\{1,2\}$ as excluded. Thus, the remaining $10-2=8$ unordered pairs can be chosen independently, giving $2^8=256$ relations.
+\item Let $u_1=a$ and the common ratio be $r>1$. Then
+\[
+a^4r^{1+2+3+4}=a^4r^{10}=82944,
+\]
+and
+\[
+a(1+r^2+r^4)=63.
+\]
+The values $a=3$ and $r=2$ satisfy both equations, since $3^4\cdot2^{10}=82944$ and $3(1+4+16)=63$. These equations have a unique solution with $r>1$; for example, on putting $t=r^2$, elimination of $a$ gives
+\[
+\frac{t^{5/4}}{1+t+t^2}=\frac{4\sqrt{2}}{21},
+\]
+whose unique admissible solution is $t=4$. Hence $u_n=3\cdot2^{n-1}$. Therefore,
+\[
+u_4+u_6+u_8=3(2^3+2^5+2^7)=3(8+32+128)=504.
+\]
+\item Write $f(i)=i+x_i$. Since $f$ is strictly increasing, $x_1\le x_2\le\cdots\le x_5$. Also, $1\le f(1)$ gives $x_1\ge0$, and $f(5)\le10$ gives $x_5\le5$. Thus each $x_i$ is a nondecreasing sequence chosen from $\{0,1,2,3,4,5\}$. The condition $f(i)\neq i+1$ excludes $x_i=1$. Therefore, $(x_1,x_2,x_3,x_4,x_5)$ is a multiset of size $5$ selected from the $5$ allowed values $\{0,2,3,4,5\}$. The number of such nondecreasing sequences is \[\binom{5+5-1}{5}=\binom{9}{5}=126.\] Hence, the required number is $126$.
+\item Let $\vec c=x\hat i+y\hat j+z\hat k$. Then $\vec a\times\vec c=(\hat i+\hat j)\times(x\hat i+y\hat j+z\hat k)=z\hat i-z\hat j+(y-x)\hat k$. Comparing with $\vec b=\hat i-\hat j$, we get $z=1$ and $y=x$. Also, $\vec c\cdot(\hat i+\hat j+\hat k)=x+y+z=3$, so $2x+1=3$, giving $x=y=1$. Hence $\vec c=\hat i+\hat j+\hat k$. Therefore, $2\vec a+\vec c=3\hat i+3\hat j+\hat k$, and $\left|2\vec a+\vec c\right|^2=3^2+3^2+1^2=19$.
+\item The disc $x^2+y^2\le 4$ has area $4\pi$. The curves $y=|x|$ and $y=2-|x|$ enclose a rhombus with vertices $(0,0)$, $(1,1)$, $(0,2)$ and $(-1,1)$. Its diagonals are both of length $2$, so its area is $\frac12\times2\times2=2$. This rhombus lies completely inside the disc. Therefore, the required area is $4\pi-2$.
+\item For the ellipse, $a_e=5$ and $b_e=3$. Hence, the focal distance is $c=\sqrt{a_e^2-b_e^2}=\sqrt{25-9}=4$. The hyperbola has the same foci, so its eccentricity is $e=\frac{c}{a_h}=\frac{3}{2}$, giving $a_h=\frac{4}{3/2}=\frac{8}{3}$. For the hyperbola, $c^2=a_h^2+b_h^2$, so $b_h^2=16-\frac{64}{9}=\frac{80}{9}$. Its latus rectum is $\frac{2b_h^2}{a_h}=\frac{2\cdot(80/9)}{8/3}=\frac{20}{3}$.
+\item Put \(t=|x+2|\), where \(t\ge 0\). Then \(t^2-7t+10=0\), so \((t-2)(t-5)=0\), giving \(t=2,5\). Hence \(x+2=\pm2,\pm5\), and the roots are \(0,-4,3,-7\). Their sum is \(0-4+3-7=-8\).
+\item A general point on $\ell$ is $H=(1+2\lambda,\,2-\lambda,\,-1+2\lambda)$. Since $PH$ is perpendicular to the direction vector $(2,-1,2)$, we have $\big((6,2,3)-H\big)\cdot(2,-1,2)=0$. Thus, $\big(5-2\lambda,\lambda,4-2\lambda\big)\cdot(2,-1,2)=0$, giving $10-4\lambda-\lambda+8-4\lambda=0$, so $\lambda=2$. Therefore, $H=(5,0,3)$ and $\vec h=5\hat i+3\hat k$. For $\vec v=\hat i+2\hat j+2\hat k$, the scalar projection is $\frac{|\vec h\cdot\vec v|}{|\vec v|}=\frac{|5+0+6|}{\sqrt{1+4+4}}=\frac{11}{3}$.
+\item Take the two parallel lines as $y=0$ and $y=8$, and let $P=(0,5)$. Suppose $Q=(x,0)$. Since $PQR$ is equilateral, the vector $\overrightarrow{PR}$ is obtained by rotating $\overrightarrow{PQ}$ through $60^\circ$. The vertical component of $\overrightarrow{PQ}$ is $-5$, while that of $\overrightarrow{PR}$ must be $+3$. Hence, using a $60^\circ$ rotation, $3=\dfrac{\sqrt{3}}{2}x-\dfrac{5}{2}$, giving $x=\dfrac{11}{\sqrt{3}}$. Therefore, the square of the side of the equilateral triangle is $PQ^2=x^2+5^2=\dfrac{121}{3}+25=\dfrac{196}{3}$. Thus, its area is $\dfrac{\sqrt{3}}{4}PQ^2=\dfrac{\sqrt{3}}{4}\cdot\dfrac{196}{3}=\boxed{\dfrac{49\sqrt{3}}{3}}$.
+\end{enumerate}
+\end{document}

@@ -1,0 +1,308 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=19mm,top=17mm,bottom=17mm]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathptmx}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{array,tabularx,booktabs}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}
+\setlist[enumerate,1]{leftmargin=1.1em,itemsep=3pt,parsep=2pt}
+\setlist[itemize]{leftmargin=1.4em,itemsep=1pt}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[C]{\footnotesize \textbf{Question Paper}}
+\fancyfoot[C]{\footnotesize Page \thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\begin{document}
+\vspace{2mm}
+\noindent \textbf{Marks : 67} \hfill \textbf{Time : 2 : 30 hours}
+\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}
+{\centering \Large \textbf{DEFINITE INTEGRALS UNIT TEST}\par}
+{\centering JEE $|$ Mathematics\par}
+\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}
+\vspace{1mm}
+\noindent \textbf{Duration:} Not specified \quad \textbf{Total Marks:} 67 \quad \textbf{Questions:} 25\par
+\vspace{2mm}
+
+\begin{tabularx}{\linewidth}{|X|X|}\hline
+Candidate Name: \rule{6cm}{0.4pt} & Roll Number: \rule{3.5cm}{0.4pt} \\\hline
+\end{tabularx}
+
+\textbf{Instructions}
+\begin{itemize}[topsep=2pt]
+\item Read every question carefully before selecting an answer.
+\item For single-correct questions, mark one option only.
+\item Use the answer sheet or space provided by the invigilator.
+\end{itemize}
+\begin{enumerate}[resume]
+\item For $a\in[0,1]$, define
+\[
+F(a)=\int_0^1 |x-a|\,dx.
+\]
+Using the symmetry of the interval $[0,1]$, determine the value of $a$ for which $F(a)$ is minimum. \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $a=0$ & (B) \quad $a=\frac14$ & (C) \quad $a=\frac12$ & (D) \quad $a=1$ \\[10pt]
+\end{tabularx}}
+\item Let $f:[0,1]\to\mathbb{R}$ be continuous and satisfy
+\[
+f(x)-f(1-x)=2x-1\qquad\text{for all }x\in[0,1].
+\]
+If
+\[
+J=\int_0^1(2x-1)f(x)\,dx,
+\]
+then the value of $J$ is: \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\dfrac{1}{6}$ & (B) \quad $\dfrac{1}{3}$ & (C) \quad $-\dfrac{1}{6}$ & (D) \quad $0$ \\[10pt]
+\end{tabularx}}
+\item For every real number $t$, define
+\[
+F(t)=\int_0^1 \frac{x^t}{1+x^t}\,dx,
+\]
+where the integral at $x=0$ is understood in the improper sense. If $a>0$ satisfies
+\[
+F(a)-F(-a)=1-2\ln 2,
+\]
+then the value of $a$ is \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\frac12$ & (B) \quad $1$ & (C) \quad $2$ & (D) \quad $e$ \\[10pt]
+\end{tabularx}}
+\item For $0\le c\le 1$, define
+\[
+F(c)=\int_0^1\frac{|x-c|}{1+x(1-x)}\,dx.
+\]
+The value of $c$ at which $F(c)$ attains its minimum is: \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\frac14$ & (B) \quad $\frac12$ & (C) \quad $\frac34$ & (D) \quad $0$ \\[10pt]
+\end{tabularx}}
+\item For a real parameter $k$ satisfying $|k|<1$, define
+\[
+I(k)=\int_{0}^{\pi}\frac{\sin x}{1+k\cos x}\,dx.
+\]
+If
+\[
+I(k)+I(-k)=4,
+\]
+then the value of $k$ is: \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $-\dfrac12$ & (B) \quad $0$ & (C) \quad $\dfrac12$ & (D) \quad $\dfrac{\sqrt3}{2}$ \\[10pt]
+\end{tabularx}}
+\item For a real parameter $\lambda$, let
+\[
+I(\lambda)=\int_{0}^{1}\frac{e^{\lambda x}}{e^{\lambda x}+e^{\lambda(1-x)}}\,dx.
+\]
+The complete set of real values of $\lambda$ for which $I(\lambda)=\frac12$ is \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X}
+(A) \quad $\lambda=0$ only & (B) \quad All $\lambda>0$ \\[10pt]
+(C) \quad All $\lambda<0$ & (D) \quad Every real number $\lambda$ \\[10pt]
+\end{tabularx}}
+\item Let $g:[0,1]\to(0,\infty)$ be continuous and satisfy $g(x)=g(1-x)$ for every $x\in[0,1]$. Define
+\[
+F(t)=\int_0^t\left(x-\frac12\right)g(x)\,dx,\qquad 0\le t\le1.
+\]
+A balance point $t\in(0,1)$ is chosen so that the accumulated signed contributions from the two reflected portions are equal, i.e. $F(t)=F(1-t)$, and their common magnitude $|F(t)|$ is maximum over $[0,1]$. The value of $t$ is \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\frac14$ & (B) \quad $\frac13$ & (C) \quad $\frac12$ & (D) \quad $\frac34$ \\[10pt]
+\end{tabularx}}
+\item Let $f$ be a continuous function on $[0,1]$ such that
+\[
+f(x)+f(1-x)=x(1-x)+k \quad \text{for every }x\in[0,1],
+\]
+where $k$ is a constant. If
+\[
+\int_0^1 f(x)\,dx=\frac{1}{3},
+\]
+then the value of $k$ is: \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\frac{1}{2}$ & (B) \quad $\frac{1}{3}$ & (C) \quad $\frac{1}{6}$ & (D) \quad $-\frac{1}{2}$ \\[10pt]
+\end{tabularx}}
+\item For a real number \(\lambda\), define
+\[
+J(\lambda)=\int_{0}^{1}\frac{e^{\lambda x}}{e^{\lambda x}+e^{\lambda(1-x)}}\,dx.
+\]
+Which of the following statements is correct? \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X}
+(A) \quad \(J(\lambda)=\frac{1}{2}\) for every real \(\lambda\). & (B) \quad \(J(\lambda)=\frac{e^{\lambda}}{1+e^{\lambda}}\) for every real \(\lambda\). \\[10pt]
+(C) \quad \(J(\lambda)\) depends on \(\lambda\) and is equal to \(\frac{1}{1+e^{-\lambda}}\). & (D) \quad \(J(\lambda)=1\) for every real \(\lambda\). \\[10pt]
+\end{tabularx}}
+\item Let $f$ be continuous on $\left[\frac12,2\right]$ and satisfy
+\[
+f(x)+f\left(\frac1x\right)=x+\frac1x \quad \text{for every }x\in\left[\frac12,2\right].
+\]
+If
+\[
+I=\int_{1/2}^{2}\frac{f(x)}{x}\,dx,
+\]
+then the value of $I$ is: \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\frac{3}{2}$ & (B) \quad $3$ & (C) \quad $\frac{9}{4}$ & (D) \quad $\frac{1}{2}$ \\[10pt]
+\end{tabularx}}
+\item Let $f:[0,1]\to\mathbb{R}$ be continuous and satisfy
+\[
+f(x)-f(1-x)=2x-1\qquad\text{for every }x\in[0,1].
+\]
+Then the value of
+\[
+I=\int_0^1(2x-1)f(x)\,dx
+\]
+is: \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\dfrac{1}{12}$ & (B) \quad $\dfrac{1}{6}$ & (C) \quad $\dfrac{1}{3}$ & (D) \quad $-\dfrac{1}{6}$ \\[10pt]
+\end{tabularx}}
+\item Let \(D=\{(x,y)\in\mathbb{R}^2:x^2+4y^2\le 4\}\). The value of
+\[
+J=\iint_D \frac{x}{1+x^2+y^2}\,dA
+\]
+is: \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad \(0\) & (B) \quad \(\pi(\sqrt{2}-1)\) & (C) \quad \(\pi(2-\sqrt{2})\) & (D) \quad \(2\pi(\sqrt{2}-1)\) \\[10pt]
+\end{tabularx}}
+\item Let $f:[0,2]\to\mathbb{R}$ be continuous and satisfy
+\[
+f(x)-f(2-x)=2x-2\qquad\text{for every }x\in[0,2].
+\]
+Then the value of
+\[
+\int_0^2 (x-1)f(x)\,dx
+\]
+is: \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\dfrac{1}{3}$ & (B) \quad $\dfrac{2}{3}$ & (C) \quad $\dfrac{4}{3}$ & (D) \quad $0$ \\[10pt]
+\end{tabularx}}
+\item Let $f_k(x)=kx-1$, where $k\in\mathbb{R}$. The reflection of $f_k$ about the midpoint $x=1$ of the interval $[0,2]$ is represented by $f_k(2-x)$. If
+$$\int_0^2 f_k(x)\,dx+\int_0^2 f_k(2-x)\,dx=12,$$
+then the value of $k$ is \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $2$ & (B) \quad $3$ & (C) \quad $4$ & (D) \quad $5$ \\[10pt]
+\end{tabularx}}
+\item Let $a\in\mathbb{R}$ satisfy
+$$\int_{0}^{\pi/2}\frac{\sin x+a\cos x}{\sin x+\cos x}\,dx=\frac{3\pi}{8}.$$ Then the value of $a$ is: \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\frac{1}{2}$ & (B) \quad $-\frac{1}{2}$ & (C) \quad $2$ & (D) \quad $-2$ \\[10pt]
+\end{tabularx}}
+\item Let $f$ be an integrable function on $[0,1]$ satisfying
+\[
+f(x)+f(1-x)=2x(1-x)+1,\qquad 0\le x\le 1.
+\]
+Define
+\[
+J(\lambda)=\int_0^1(\lambda x+1)f(x)\,dx
+\]
+and its reflected-weight counterpart
+\[
+R(\lambda)=\int_0^1\bigl(\lambda(1-x)+1\bigr)f(x)\,dx.
+\]
+If $J(\lambda)+R(\lambda)=2$, then the value of $\lambda$ is: \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $-2$ & (B) \quad $1$ & (C) \quad $2$ & (D) \quad $4$ \\[10pt]
+\end{tabularx}}
+\item Let $g$ be continuous on $[0,2]$ and satisfy $g(x)-g(2-x)=2x-2$ for every $x\in[0,2]$. If $\int_0^2 g(x)\,dx=5$, then the value of $M=\int_0^2 xg(x)\,dx$ is: \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\frac{13}{3}$ & (B) \quad $\frac{15}{3}$ & (C) \quad $\frac{17}{3}$ & (D) \quad $\frac{19}{3}$ \\[10pt]
+\end{tabularx}}
+\item Let $f$ be a continuous function on $[0,1]$ satisfying $f(x)=f(1-x)$ for all $x\in[0,1]$, and suppose that $\displaystyle\int_0^1 f(x)\,dx=8$. Define
+\[
+I_\lambda=\int_0^1\bigl[\lambda x^2+(1-\lambda)x\bigr]f(x)\,dx.
+\]
+Which value of $\lambda$ ensures that $I_\lambda$ is determined solely by the given value of $\displaystyle\int_0^1 f(x)\,dx$, without requiring any additional moment of $f$? \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $-1$ & (B) \quad $0$ & (C) \quad $\frac12$ & (D) \quad $1$ \\[10pt]
+\end{tabularx}}
+\item Let \(k\in\mathbb{R}\) be such that both integrals converge and
+\[
+\int_0^1 \frac{x^k}{1+x^k}\,dx=\int_0^1 \frac{1}{1+x^k}\,dx.
+\]
+Then the value of \(k\) is: \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X}
+(A) \quad \(k=-1\) & (B) \quad \(k=0\) \\[10pt]
+(C) \quad \(k=1\) & (D) \quad There is no real value of \(k\) \\[10pt]
+\end{tabularx}}
+\item For a positive real number $a$, define
+\[
+I(a)=\int_{0}^{1}\frac{x^{a}}{x^{a}+(1-x)^{a}}\,dx.
+\]
+Without evaluating any antiderivative, determine the value of $I(a)$. \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $0$ & (B) \quad $\frac{1}{4}$ & (C) \quad $\frac{1}{2}$ & (D) \quad $1$ \\[10pt]
+\end{tabularx}}
+\item Let $f:[0,1]\to\mathbb{R}$ be continuous and satisfy
+\[
+f(x)+f(1-x)=e^x+e^{1-x}\quad\text{for every }x\in[0,1].
+\]
+Then the value of
+\[
+\int_0^1 f(x)\,dx
+\]
+is: \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $e-1$ & (B) \quad $\dfrac{e-1}{2}$ & (C) \quad $2(e-1)$ & (D) \quad $e$ \\[10pt]
+\end{tabularx}}
+\item Let $f:[0,1]\to\mathbb{R}$ be continuous and satisfy
+\[
+f(x)+f(1-x)=x(1-x)\quad\text{for every }x\in[0,1].
+\]
+Then the value of
+\[
+\int_0^1 f(x)\,dx
+\]
+is \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $\frac{1}{24}$ & (B) \quad $\frac{1}{12}$ & (C) \quad $\frac{1}{6}$ & (D) \quad $\frac{1}{3}$ \\[10pt]
+\end{tabularx}}
+\item For $t\in[0,\tfrac12]$, define
+\[
+A(t)=\int_0^1 |x-t|(x+1-t)\,dx.
+\]
+If $A(t)=\tfrac12$, then the value of $t$ is: \hfill [4 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X}
+(A) \quad $1-\dfrac{1}{\sqrt[3]{2}}$ & (B) \quad $\dfrac{1}{\sqrt[3]{2}}$ \\[10pt]
+(C) \quad $1-\dfrac{1}{\sqrt{2}}$ & (D) \quad $\dfrac12$ \\[10pt]
+\end{tabularx}}
+\item Let $h:[0,1]\to(0,\infty)$ be continuous and define
+\[
+g(x)=\frac{h(x)}{h(x)+h(1-x)}.
+\]
+Then the value of
+\[
+\int_0^1 g(x)\,dx
+\]
+is: \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X}
+(A) \quad $0$ & (B) \quad $\frac{1}{2}$ \\[10pt]
+(C) \quad $1$ & (D) \quad It depends on the choice of $h$ \\[10pt]
+\end{tabularx}}
+\item Let $f$ be an integrable function on $[0,1]$ such that $f(x)=f(1-x)$ for every $x\in[0,1]$. If
+\[
+A=\int_0^1 f(x)\,dx,\qquad M=\int_0^1 x f(x)\,dx,
+\]
+then which of the following is necessarily true? \hfill [1 marks]
+{\renewcommand{\arraystretch}{1.8}
+\begin{tabularx}{\linewidth}{X X X X}
+(A) \quad $M=\dfrac{A}{2}$ & (B) \quad $M=A$ & (C) \quad $M=\dfrac{A}{3}$ & (D) \quad $M=0$ \\[10pt]
+\end{tabularx}}
+\end{enumerate}
+\end{document}

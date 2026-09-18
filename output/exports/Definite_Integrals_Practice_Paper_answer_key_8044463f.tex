@@ -1,0 +1,169 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=19mm,top=17mm,bottom=17mm]{geometry}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathptmx}
+\usepackage{enumitem}
+\usepackage{fancyhdr}
+\usepackage{array,tabularx,booktabs}
+\usepackage[hidelinks]{hyperref}
+\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}
+\setlist[enumerate,1]{leftmargin=1.1em,itemsep=3pt,parsep=2pt}
+\setlist[itemize]{leftmargin=1.4em,itemsep=1pt}
+\pagestyle{fancy}\fancyhf{}
+\fancyhead[C]{\footnotesize \textbf{Question Paper}}
+\fancyfoot[C]{\footnotesize Page \thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+\begin{document}
+\vspace{2mm}
+\noindent \textbf{Marks : 28} \hfill \textbf{Time : 2 : 30 hours}
+\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}
+{\centering \Large \textbf{DEFINITE INTEGRALS PRACTICE PAPER --- ANSWER KEY}\par}
+{\centering JEE $|$ Mathematics\par}
+\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}
+\vspace{1mm}
+\noindent \textbf{Duration:} Not specified \quad \textbf{Total Marks:} 28 \quad \textbf{Questions:} 10\par
+\vspace{2mm}
+
+\section*{Answer Key}
+\noindent\begin{tabularx}{\linewidth}{|c|c|c|X|}\hline
+\textbf{Q} & \textbf{Answer} & \textbf{Marks} & \textbf{Concept} \\\hline
+1 & Every real number & 4 & symmetry and substitution properties of definite integrals \\\hline
+2 & $\frac{6}{5}$ & 4 & symmetry of definite integrals \\\hline
+3 & $\frac{1}{10}$ & 4 & Symmetry of definite integrals under affine reflection \\\hline
+4 & $\frac{1}{2}$ & 4 & Symmetry of definite integrals via reflection substitution \\\hline
+5 & \(\dfrac{L}{2}\) & 1 & symmetry of definite integrals \\\hline
+6 & Every real value of \(\lambda\) & 1 & Symmetry and transformation properties of definite integrals \\\hline
+7 & \(\frac12\) & 4 & symmetry of definite integrals \\\hline
+8 & $\frac{1}{2}$ & 1 & Symmetry and reflection properties of definite integrals \\\hline
+9 & $3$ & 1 & Symmetry of definite integrals under reflection of the interval \\\hline
+10 & $2$ & 4 & Symmetry of definite integrals under the transformation $x\textbackslash\{\}mapsto 1-x$ \\\hline
+\end{tabularx}
+
+\section*{Solutions}
+\begin{enumerate}
+\item After replacing \(x\) by \(1-x\), the integral becomes
+\[
+\int_0^1\left[\frac{(1-x)^2}{1+(1-x)^2}+k\frac{x^2}{1+x^2}\right]dx.
+\]
+However, for any integrable function \(f\) on \([0,1]\), the substitution \(x=1-t\) gives
+\[
+\int_0^1 f(1-x)\,dx=\int_0^1 f(t)\,dt.
+\]
+Thus, the reflected integral is automatically equal to \(J(k)\) for every real value of \(k\). In particular, although the two component terms are interchanged, their integrals over \([0,1]\) are equal by the same reflection symmetry. Hence there is no unique parameter value; every real \(k\) satisfies the condition.
+\item Let $w(x)=x(2-x)$. Using the substitution $x=2-t$ in $J$, and then renaming $t$ as $x$, we obtain
+\[
+J=\int_0^2 (2-x)x\,f(2-x)\,dx=\int_0^2 w(x)f(2-x)\,dx,
+\]
+since $w(2-x)=w(x)$. Adding this to the original expression for $J$ gives
+\[
+2J=\int_0^2 w(x)\bigl[f(x)+f(2-x)\bigr]dx
+=\int_0^2 w(x)\bigl[w(x)+1\bigr]dx.
+\]
+Now,
+\[
+\int_0^2 w(x)\,dx=\int_0^2 x(2-x)\,dx=\frac{4}{3},
+\]
+and
+\[
+\int_0^2 w(x)^2\,dx=\int_0^2 x^2(2-x)^2\,dx=\frac{16}{15}.
+\]
+Therefore,
+\[
+2J=\frac{16}{15}+\frac{4}{3}=\frac{36}{15}=\frac{12}{5},
+\qquad J=\frac{6}{5}.
+\]
+\item Using the substitution $u=1-x$ in the integral defining $J$, we get
+\[
+J=\int_0^1 x(1-x)f(1-x)\,dx,
+\]
+since $x(1-x)$ is invariant under $x\mapsto 1-x$. Adding this equation to the original one gives
+\[
+2J=\int_0^1 x(1-x)\bigl[f(x)+f(1-x)\bigr]dx.
+\]
+Using the given relation,
+\[
+2J=\int_0^1 x(1-x)\bigl[1+x(1-x)\bigr]dx.
+\]
+Now,
+\[
+\int_0^1 x(1-x)dx=\frac16,
+\qquad
+\int_0^1 x^2(1-x)^2dx=\int_0^1(x^2-2x^3+x^4)dx=\frac1{30}.
+\]
+Therefore,
+\[
+2J=\frac16+\frac1{30}=\frac15,
+\qquad J=\frac1{10}.
+\]
+\item Put $x=1-t$. Then $dx=-dt$, and as $x$ varies from $0$ to $1$, $t$ varies from $1$ to $0$. Hence, \[I=\int_0^1\frac{(2-t)^7}{(2-t)^7+(1+t)^7}\,dt.\] Renaming $t$ as $x$, we obtain \[I=\int_0^1\frac{(2-x)^7}{(2-x)^7+(1+x)^7}\,dx.\] Adding this expression to the original one gives \[2I=\int_0^1\left[\frac{(1+x)^7}{(1+x)^7+(2-x)^7}+\frac{(2-x)^7}{(2-x)^7+(1+x)^7}\right]dx=\int_0^1 1\,dx=1.\] Therefore, $I=\frac12$.
+\item Let \(I=\int_0^L x\rho(x)\,dx\). Using the substitution \(u=L-x\), we get \[I=\int_0^L (L-u)\rho(L-u)\,du.\] Since \(\rho(L-u)=\rho(u)\), \[I=\int_0^L (L-u)\rho(u)\,du=L\int_0^L\rho(u)\,du-I.\] Hence \[2I=L\int_0^L\rho(u)\,du.\] The denominator is positive because \(\rho\ge 0\) and \(\rho\) is not identically zero. Therefore, \[\bar{x}=\frac{I}{\int_0^L\rho(x)\,dx}=\frac{L}{2}.\] Thus the center of mass lies at the midpoint of the interval, independent of the detailed form of \(\rho\).
+\item In the second integral, put \(t=1-x\). Then \(dx=-dt\), and as \(x\) varies from \(0\) to \(1\), \(t\) varies from \(1\) to \(0\). Hence,
+\[
+\int_{0}^{1}\frac{(1-x)^2+\lambda(1-x)}{1+(1-x)^2}\,dx
+=\int_{1}^{0}\frac{t^2+\lambda t}{1+t^2}(-dt)
+=\int_{0}^{1}\frac{t^2+\lambda t}{1+t^2}\,dt
+=I(\lambda).
+\]
+Thus the stated equality is an identity and is true for every real \(\lambda\).
+\item Define \(w(x)=\sqrt{x(1-x)}[1+x(1-x)]\). Since \(w(1-x)=w(x)\), substituting \(x=1-t\) gives
+\[
+\int_0^1 xw(x)\,dx=\int_0^1 (1-x)w(x)\,dx.
+\]
+Hence,
+\[
+2\int_0^1 xw(x)\,dx=\int_0^1 w(x)\,dx,
+\]
+so \(\int_0^1 xw(x)\,dx=\frac12\int_0^1w(x)\,dx\). The given condition becomes
+\[
+\int_0^1xw(x)\,dx-\lambda\int_0^1w(x)\,dx=0.
+\]
+Because \(w(x)>0\) for \(0<x<1\), its integral is nonzero. Therefore, \(\lambda=\frac12\).
+\item We have
+\[
+g(1-x)=1+(1-x)x=1+x(1-x)=g(x),
+\]
+so the graph of $g$ is symmetric about $x=\frac12$. Also, $g(x)=1+x(1-x)>0$ on $[0,1]$.
+
+Under the reflection $x\mapsto 1-x$, the area over $[0,c]$ corresponds to the area over $[1-c,1]$. Thus, symmetry gives equal areas on the two sides of $x=\frac12$:
+\[
+\int_0^{1/2}g(x)\,dx=\int_{1/2}^1g(x)\,dx.
+\]
+Since $g(x)>0$, the accumulated integral $\int_0^c g(x)\,dx$ is strictly increasing in $c$, so the equal-area point is unique. Therefore,
+\[
+\boxed{c=\frac12}.
+\]
+\item In the second integral, substitute $u=6-x$. Since the limits change from $x=1,5$ to $u=5,1$, we obtain
+\[
+\int_{1}^{5}(x-c)f(6-x)\,dx=\int_{1}^{5}(6-u-c)f(u)\,du.
+\]
+Therefore, the given relation becomes
+\[
+\int_{1}^{5}\bigl[(u-c)+(6-u-c)\bigr]f(u)\,du=0,
+\]
+that is,
+\[
+(6-2c)\int_{1}^{5}f(u)\,du=0.
+\]
+Since this must hold for every integrable function $f$, we require $6-2c=0$. Hence,
+\[
+\boxed{c=3}.
+\]
+\item Let
+\[
+g(x)=\frac{x^a}{x^a+(1-x)^a}.
+\]
+Replacing $x$ by $1-x$, we get
+\[
+g(1-x)=\frac{(1-x)^a}{x^a+(1-x)^a}.
+\]
+Hence, $g(x)+g(1-x)=1$. By symmetry of the interval $[0,1]$,
+\[
+2\int_0^1 g(x)\,dx=\int_0^1\bigl(g(x)+g(1-x)\bigr)\,dx=\int_0^1 1\,dx=1.
+\]
+Therefore,
+\[
+\int_0^1 \frac{x^a}{x^a+(1-x)^a}\,dx=\frac12.
+\]
+Using the given equation, $\frac12=\frac{a}{4}$, so $a=2$.
+\end{enumerate}
+\end{document}

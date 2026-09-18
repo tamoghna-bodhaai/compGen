@@ -66,15 +66,27 @@ def repair_decoded_latex_escapes(value: Any) -> Any:
 
 
 def _repair_latex_controls(value: str) -> str:
-    return (
-        value.replace("\f" + "rac", "\\frac")
+    # Some providers use a NUL sentinel around TeX commands.  It can arrive as
+    # an actual control character after JSON decoding or as the literal text
+    # ``\\u0000`` after the fallback JSON repair below.  It has no semantic
+    # meaning in the question content, so remove it before rendering or saving.
+    repaired = (
+        value.replace("\\u0000", "")
+        .replace("\x00", "")
+        .replace("\f" + "rac", "\\frac")
         .replace("\t" + "an", "\\tan")
         .replace("\t" + "ext", "\\text")
         .replace("\b" + "egin", "\\begin")
         .replace("\b" + "ox", "\\box")
+        .replace("\b" + "inom", "\\binom")
         .replace("\r" + "ight", "\\right")
         .replace("\a" + "sqrt", "\\sqrt")
     )
+    # A few providers substitute other C0 controls for the leading backslash
+    # (for example, ``\\alpha`` becomes ``\\x01alpha``).  Newlines, tabs,
+    # and carriage returns are intentionally excluded so prose formatting is
+    # never changed.
+    return re.sub(r"[\x01-\x08\x0b-\x1f](?=[A-Za-z])", r"\\", repaired)
 
 
 def parse_model_json(content: str) -> dict[str, Any]:
