@@ -87,7 +87,11 @@ export function ReferenceReadyReckoner({ open, onClose }: { open: boolean; onClo
             </Field>
           </div>
           <Field label="Custom instruction">
-            <Textarea name="custom_instruction" placeholder="Take this paper as reference & generate a structural variation around this based on the paper" rows={3} />
+            <Textarea name="custom_instruction" placeholder="Take this paper as reference & generate a structural variation around this based on the paper. You can also write 'only questions 10-20' here to filter." rows={3} />
+          </Field>
+          <Field label="Reference questions filter (optional)">
+            <Input name="reference_filter" placeholder="e.g. 10-20 or 1,5,10-12 — leave empty for full paper" />
+            <small className={s.muted}>If you upload a full paper, list which numbers to use (e.g. 10-20). Also auto-detected if you write “only 10-20” above. Leave empty to use the whole paper.</small>
           </Field>
           <Field label="Exam (optional, auto-detected if blank)">
             <Input name="exam" placeholder="JEE / NEET" />

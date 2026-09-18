@@ -331,6 +331,8 @@ class PaperService:
         custom_instruction: str | None,
         desired_count: int,
         variation_strength: str = "balanced",
+        reference_filter_raw: str = "",
+        reference_filter_formatted: str = "",
     ) -> dict:
         """Create a paper backed by reference image/paper for structural variation.
 
@@ -403,6 +405,8 @@ class PaperService:
             "reference_images": reference_images,
             "reference_custom_instruction": (custom_instruction or "").strip() or "Take this paper as reference & generate a structural variation around this based on the paper",
             "reference_source_name": f"reference-{title}",
+            "reference_filter_raw": reference_filter_raw,
+            "reference_filter_formatted": reference_filter_formatted,
         }
 
         # Validate core fields via GenerationRequest but allow extra keys
@@ -422,8 +426,14 @@ class PaperService:
         self._register_job_task(job_id)
         try:
             await self._wait_until_job_can_continue(job_id)
-            self._update_generation_job(job_id, state="running", message="Generating and independently validating questions", started=True)
             paper = self.get(paper_id)
+            ref_filter_fmt = paper["generation_config"].get("reference_filter_formatted") if paper.get("generation_config") else None
+            start_msg = "Generating and independently validating questions"
+            if ref_filter_fmt:
+                # Show selective reference in live logs
+                total_ref = len(paper["generation_config"].get("reference_questions") or [])
+                start_msg = f"Generating from reference {ref_filter_fmt} ({total_ref} selected) — validating questions"
+            self._update_generation_job(job_id, state="running", message=start_msg, started=True)
             request = self._core_generation_request(paper["generation_config"])
             all_slots = request.build_slots()
             completed_slots = self._completed_initial_slots(paper) & {slot.slot for slot in all_slots}
@@ -470,11 +480,14 @@ class PaperService:
                     before_slot=lambda _: self._wait_until_job_can_continue(job_id),
                 )
             self.update(paper_id, PaperUpdateRequest(status="generated"))
+            final_msg = f"Generated and validated {len(all_slots)} questions"
+            if ref_filter_fmt:
+                final_msg = f"Generated {len(all_slots)} variations from reference {ref_filter_fmt}"
             self._update_generation_job(
                 job_id,
                 state="succeeded",
                 completed_questions=len(all_slots),
-                message=f"Generated and validated {len(all_slots)} questions",
+                message=final_msg,
                 finished=True,
             )
         except asyncio.CancelledError:

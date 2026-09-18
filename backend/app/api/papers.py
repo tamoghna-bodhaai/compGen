@@ -60,6 +60,7 @@ async def create_from_reference(
     variation_strength: str = Form(default="balanced"),
     exam: str = Form(default=""),
     subject: str = Form(default=""),
+    reference_filter: str = Form(default=""),
 ) -> dict:
     try:
         # No cap per user request - allow whole paper (e.g. JEE mains 90 Qs); guard only by sane upper bound 200 to avoid runaway
@@ -73,10 +74,45 @@ async def create_from_reference(
         content_type = file.content_type
 
         from app.services.reference import extract_reference_questions
+        from app.services.reference_filter import format_filter, parse_reference_filter
 
         reference_questions, reference_images = await extract_reference_questions(
             filename=filename, content_type=content_type, content=content, custom_instruction=custom_instruction
         )
+
+        # Support selective reference: explicit field + implicit parse from free-text custom_instruction
+        # If filter detectable -> use only those source_question_numbers, else full paper
+        explicit = parse_reference_filter(reference_filter)
+        implicit = parse_reference_filter(custom_instruction)
+        effective = explicit if explicit is not None else implicit
+        raw_filter = (reference_filter or "").strip() or (custom_instruction or "").strip()
+        if effective is not None:
+            filtered = []
+            fallback_filtered = []
+            for idx, q in enumerate(reference_questions, start=1):
+                num = q.get("source_question_number")
+                # source_question_number may be int or None; fallback to ordinal position
+                try:
+                    n = int(num) if num is not None else idx
+                except Exception:
+                    n = idx
+                if n in effective:
+                    filtered.append(q)
+                # Also keep fallback mapping for ordinal if LLM numbering differs
+                if idx in effective:
+                    fallback_filtered.append(q)
+            # Prefer direct source_question_number match; if that yields empty but ordinal would match, use ordinal
+            if not filtered and fallback_filtered:
+                filtered = fallback_filtered
+            if not filtered:
+                extracted_nums = sorted({int(q.get("source_question_number")) for q in reference_questions if q.get("source_question_number") is not None})
+                extracted_desc = f"extracted numbers {extracted_nums[:20]}{'...' if len(extracted_nums) > 20 else ''}" if extracted_nums else f"{len(reference_questions)} questions (numbered 1-{len(reference_questions)})"
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                    detail=f"Filter {format_filter(effective)} matched 0 of {len(reference_questions)} extracted questions ({extracted_desc}). Adjust filter or leave empty for full paper.",
+                )
+            # Preserve user-visible formatting
+            reference_questions = filtered
 
         # Allow caller to override count with actual extracted count if they sent 0? Already handled
         # Reuse STRUCTURAL mode via create_reference_paper
@@ -90,6 +126,8 @@ async def create_from_reference(
             custom_instruction=custom_instruction,
             desired_count=desired_count,
             variation_strength=variation_strength,
+            reference_filter_raw=raw_filter if effective is not None else "",
+            reference_filter_formatted=format_filter(effective) if effective is not None else "",
         )
         job = PaperService().queue_initial_generation(paper["id"])
         background_tasks.add_task(_run_initial_generation, paper["id"], job["id"])

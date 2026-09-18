@@ -597,7 +597,7 @@ class PaperDocumentRenderer:
         for name, size in (("Title", 18), ("Heading 1", 13), ("Heading 2", 11)):
             style = doc.styles[name]
             style.font.name, style.font.size, style.font.color.rgb = "Times New Roman", Pt(size), RGBColor(0, 0, 0)
-            style.font.bold = True
+            style.font.bold = False
             style.paragraph_format.space_before, style.paragraph_format.space_after = Pt(10 if name != "Title" else 0), Pt(6)
         title_borders = doc.styles["Title"]._element.pPr.find(qn("w:pBdr"))
         if title_borders is not None:
@@ -605,8 +605,11 @@ class PaperDocumentRenderer:
         if "Question" not in doc.styles:
             question = doc.styles.add_style("Question", WD_STYLE_TYPE.PARAGRAPH)
             question.base_style, question.font.name, question.font.size = doc.styles["Normal"], "Times New Roman", Pt(10.5)
-            question.font.bold = True
+            question.font.bold = False
             question.paragraph_format.space_before, question.paragraph_format.space_after = Pt(8), Pt(3)
+        else:
+            # Ensure exported question stems are regular weight (not bold highlight).
+            doc.styles["Question"].font.bold = False
 
     @staticmethod
     def _add_header_footer(doc: Document, branding: dict[str, Any], paper: dict[str, Any] | None = None) -> None:
@@ -624,7 +627,7 @@ class PaperDocumentRenderer:
                 header.add_run("  ")
             header_text = str(branding.get("header_text") or branding.get("institution_name") or "").strip()
             if header_text:
-                header.add_run(header_text).bold = True
+                header.add_run(header_text).bold = False
             contact_line = " · ".join(part for part in (str(branding.get("address") or "").strip(), str(branding.get("contact") or "").strip()) if part)
             if contact_line:
                 line = section.header.add_paragraph(contact_line)
@@ -691,7 +694,7 @@ class PaperDocumentRenderer:
                         paragraph.add_run("  ")
                 if header_values[index]:
                     run = paragraph.add_run(header_values[index])
-                    run.bold = True
+                    run.bold = False
                     run.font.size = Pt(float(layout.get("font_size") or 9.5))
             if layout.get("divider_enabled", True):
                 divider = section.header.add_paragraph()
@@ -744,22 +747,22 @@ class PaperDocumentRenderer:
         duration_text = f"Time : {self._format_duration(duration)}" if duration not in (None, "") else "Time : 2 : 30 hours"
         meta = doc.add_paragraph()
         meta.paragraph_format.space_before, meta.paragraph_format.space_after = Pt(4), Pt(2)
-        meta.add_run(marks_text).bold = True
+        meta.add_run(marks_text).bold = False
         meta.add_run("\t")
         tail = meta.add_run(duration_text)
-        tail.bold = True
+        tail.bold = False
         meta.paragraph_format.tab_stops.add_tab_stop(section.page_width - section.left_margin - section.right_margin, WD_ALIGN_PARAGRAPH.RIGHT)
-        self._add_horizontal_rule(doc, bold=True)
+        self._add_horizontal_rule(doc, bold=False)
         title = doc.add_paragraph(style="Title")
         title.alignment = WD_ALIGN_PARAGRAPH.CENTER
         title.paragraph_format.space_before, title.paragraph_format.space_after = Pt(4), Pt(1)
         title_run = title.add_run(str(paper["title"]).upper() + (" — ANSWER KEY" if variant == ExportVariant.ANSWER_KEY else ""))
         title_run.font.name = "Times New Roman"
-        title_run.font.bold = True
+        title_run.font.bold = False
         fonts = title_run._element.get_or_add_rPr().get_or_add_rFonts()
         for attribute in ("ascii", "hAnsi", "eastAsia", "cs"):
             fonts.set(qn(f"w:{attribute}"), "Times New Roman")
-        self._add_horizontal_rule(doc, bold=True)
+        self._add_horizontal_rule(doc, bold=False)
         doc.add_paragraph()
 
     @staticmethod
@@ -867,7 +870,7 @@ class PaperDocumentRenderer:
             _set_cell_padding(cell)
             cell.paragraphs[0].alignment = WD_ALIGN_PARAGRAPH.CENTER
             for run in cell.paragraphs[0].runs:
-                run.font.bold = True
+                run.font.bold = False
         for number, question in enumerate(paper["questions"], start=1):
             payload = question["question_json"]
             answer = (question.get("answer_json") or {}).get("correct_answer") or "Not verified"
@@ -1003,14 +1006,17 @@ class PaperDocumentRenderer:
             r"\usepackage{draftwatermark}",
             r"\usepackage{graphicx}",
             r"\usepackage{array,tabularx,booktabs}",
+            r"\usepackage{titlesec}",
+            r"\titleformat*{\section}{\Large\mdseries}",
+            r"\titleformat*{\subsection}{\large\mdseries}",
             r"\usepackage[hidelinks]{hyperref}",
             r"\setlength{\parindent}{0pt}\setlength{\parskip}{4pt}",
             r"\setlist[enumerate,1]{leftmargin=1.1em,itemsep=3pt,parsep=2pt}",
             r"\setlist[itemize]{leftmargin=1.4em,itemsep=1pt}",
             r"\pagestyle{fancy}\fancyhf{}",
-            rf"\fancyhead[L]{{\footnotesize \textbf{{{header_left}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[L]{}",
-            rf"\fancyhead[C]{{\footnotesize \textbf{{{header_center}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[C]{}",
-            rf"\fancyhead[R]{{\footnotesize \textbf{{{header_right}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[R]{}",
+            rf"\fancyhead[L]{{\footnotesize {{{header_left}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[L]{}",
+            rf"\fancyhead[C]{{\footnotesize {{{header_center}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[C]{}",
+            rf"\fancyhead[R]{{\footnotesize {{{header_right}}}}}" if layout.get("header_enabled", True) else r"\fancyhead[R]{}",
             rf"\fancyfoot[L]{{\footnotesize {footer_left + (r'  $\cdot$  Page \thepage' if layout.get('page_number_position') == 'left' else '')}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[L]{}",
             rf"\fancyfoot[C]{{\footnotesize {footer_center + (r'  $\cdot$  Page \thepage' if layout.get('page_number_position', 'center') == 'center' else '')}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[C]{}",
             rf"\fancyfoot[R]{{\footnotesize {footer_right + (r'  $\cdot$  Page \thepage' if layout.get('page_number_position') == 'right' else '')}}}" if layout.get("footer_enabled", True) else r"\fancyfoot[R]{}",
@@ -1018,14 +1024,14 @@ class PaperDocumentRenderer:
             rf"\SetWatermarkText{{{watermark}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkText{}",
             rf"\SetWatermarkScale{{{float(layout.get('watermark_size') or 1.4)}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkScale{1}",
             rf"\SetWatermarkAngle{{{int(layout.get('watermark_rotation') or 45)}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkAngle{45}",
-            rf"\SetWatermarkLightness{{{max(0, min(100, 100 - int(layout.get('watermark_opacity') or 18)))}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkLightness{100}",
+            rf"\SetWatermarkLightness{{{max(0, min(100, 100 - int(layout.get('watermark_opacity') or 18)))/100:.2f}}}" if watermark and layout.get("watermark_enabled", True) else r"\SetWatermarkLightness{1}",
             r"\begin{document}",
         ]
         lines += [
             r"\vspace{2mm}",
-            rf"\noindent \textbf{{Marks : {self._latex_escape(marks)}}} \hfill \textbf{{Time : {self._latex_escape(duration_text)}}}",
+            rf"\noindent {{Marks : {self._latex_escape(marks)}}} \hfill {{Time : {self._latex_escape(duration_text)}}}",
             r"\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}",
-            rf"{{\centering \Large \textbf{{{title.upper()}}}\par}}",
+            rf"{{\centering \Large {{{title.upper()}}}\par}}",
             r"\noindent\rule{\linewidth}{1.1pt}\vspace{-1mm}\noindent\rule{\linewidth}{0.5pt}",
             r"\vspace{2mm}",
             "",
@@ -1033,7 +1039,7 @@ class PaperDocumentRenderer:
         if variant == ExportVariant.ANSWER_KEY:
             lines.append(r"\section*{Answer Key}")
             lines.append(r"\noindent\begin{tabularx}{\linewidth}{|c|c|c|X|}\hline")
-            lines.append(r"\textbf{Q} & \textbf{Answer} & \textbf{Marks} & \textbf{Concept} \\\hline")
+            lines.append(r"Q & Answer & Marks & Concept \\\hline")
             for number, question in enumerate(paper["questions"], start=1):
                 payload = question.get("question_json") or {}
                 answer = (question.get("answer_json") or {}).get("correct_answer") or "Not verified"
