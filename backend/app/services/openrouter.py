@@ -132,8 +132,19 @@ class OpenRouterClient:
         if images:
             user_content: Any = [{"type": "text", "text": user_prompt}]
             for b64 in images:
-                # Expect raw base64 PNG without data URL prefix
-                url = b64 if b64.startswith("data:") else f"data:image/png;base64,{b64}"
+                # Accept raw base64 (default PNG) or full data URL with explicit mime
+                if b64.startswith("data:"):
+                    url = b64
+                elif b64.startswith("http"):
+                    url = b64
+                else:
+                    # Heuristic: JPEG magic: /9j/ prefix indicates JPEG
+                    mime = "image/png"
+                    if b64.startswith("/9j/"):
+                        mime = "image/jpeg"
+                    elif b64.startswith("UklGR"):
+                        mime = "image/webp"
+                    url = f"data:{mime};base64,{b64}"
                 user_content.append({"type": "image_url", "image_url": {"url": url}})
         else:
             user_content = user_prompt

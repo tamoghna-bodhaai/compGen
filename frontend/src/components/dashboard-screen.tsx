@@ -8,6 +8,7 @@ import type { PaperSummary } from "@/lib/types";
 import { useWorkspace } from "@/context/workspace-context";
 import { Button, EmptyState, IngestionProgress, JobProgress, PageHeader, StatusBadge, generationLabel } from "@/components/ui";
 import { Icon } from "@/components/icons";
+import { ReferenceReadyReckoner } from "@/components/reference-ready-reckoner";
 import s from "@/styles/ui.module.css";
 
 const FILTERS = [["all", "All papers"], ["draft", "Drafts"], ["generating", "Generating"], ["ready", "Ready"], ["attention", "Needs attention"], ["cancelled", "Cancelled"]] as const;
@@ -26,6 +27,7 @@ export function DashboardScreen() {
   const [filter, setFilter] = useState<(typeof FILTERS)[number][0]>("all");
   const [search, setSearch] = useState("");
   const [showAll, setShowAll] = useState(false);
+  const [referenceOpen, setReferenceOpen] = useState(false);
 
   const metrics = useMemo(() => papers.reduce((result, paper) => {
     result.total += 1; result.questions += paper.question_count || 0;
@@ -63,7 +65,7 @@ export function DashboardScreen() {
   }
 
   return <section className={s.content}>
-    <PageHeader eyebrow="Overview" title="Your paper workspace" description="Create, monitor, curate, and export JEE-ready question papers from one focused workspace." actions={<><Link className={`${s.button} ${s.button_default}`} href="/question-bank"><Icon name="library" />Browse question bank</Link><Link className={`${s.button} ${s.button_primary}`} href="/new-paper"><Icon name="plus" />Create paper</Link></>} />
+    <PageHeader eyebrow="Overview" title="Your paper workspace" description="Create, monitor, curate, and export JEE-ready question papers from one focused workspace." actions={<><Link className={`${s.button} ${s.button_default}`} href="/question-bank"><Icon name="library" />Browse question bank</Link><Button tone="default" icon="sparkle" onClick={() => setReferenceOpen(true)}>Generate from reference</Button><Link className={`${s.button} ${s.button_primary}`} href="/new-paper"><Icon name="plus" />Create paper</Link></>} />
 
     <section className={s.metricStrip} aria-label="Paper overview">
       {[{ key: "all", label: "Total papers", value: metrics.total, icon: "document" as const }, { key: "generating", label: "Generating", value: metrics.generating, icon: "sparkle" as const }, { key: "ready", label: "Ready to export", value: metrics.ready, icon: "check" as const }, { key: "all", label: "Total questions", value: metrics.questions, icon: "questions" as const }].map((item, index) => <button key={`${item.label}-${index}`} className={`${s.metric} ${filter === item.key ? s.metricActive : ""}`} onClick={() => { setFilter(item.key as typeof filter); setShowAll(false); }}><span className={s.metricIcon}><Icon name={item.icon} /></span><span><small>{item.label}</small><strong>{item.value}</strong></span></button>)}
@@ -76,5 +78,6 @@ export function DashboardScreen() {
       <div className={s.filterbar}><div className={s.segmented} role="tablist" aria-label="Filter papers by status">{FILTERS.map(([value, text]) => <button key={value} role="tab" aria-selected={filter === value} className={filter === value ? s.segmentActive : ""} onClick={() => { setFilter(value); setShowAll(false); }}>{text}</button>)}</div><span>{displayed.length} of {filtered.length} shown</span></div>
       {loading ? <EmptyState title="Loading your workspace" description="Fetching papers and current generation activity…" /> : error ? <EmptyState title="Couldn’t reach the API" description={`${error} Start FastAPI on port 8000, then retry.`} action={<Button onClick={() => void refresh()}>Retry</Button>} /> : displayed.length ? <div className={s.paperTable} role="table" aria-label="Paper library"><div className={s.paperTableHead} role="row"><span>Paper</span><span>Status</span><span>Questions</span><span>Updated</span><span className={s.srOnly}>Actions</span></div>{displayed.map((paper) => { const state = paperDashboardState(paper); const requested = paper.requested_question_count || 0; return <article className={s.paperRow} role="row" key={paper.id}><div className={s.paperIdentity}><span className={s.paperIcon}><Icon name="document" /></span><span><strong>{paper.title}</strong><small>{[paper.exam, paper.subject].filter(Boolean).join(" · ") || "Paper workspace"}</small></span></div><StatusBadge status={state}>{label(paper)}</StatusBadge><span className={s.rowMeta}>{requested ? `${paper.question_count}/${requested}` : paper.question_count} questions{state === "generating" && <small>{generationLabel(paper)}</small>}</span><span className={s.rowMeta}>Updated {new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", year: "numeric" }).format(new Date(paper.updated_at))}</span><div className={s.rowActions}>{state === "attention" || state === "cancelled" || (state === "draft" && !paper.question_count) ? <Button size="small" onClick={() => void retry(paper)}>{state === "attention" ? "Retry" : state === "cancelled" ? "Continue" : "Generate"}</Button> : <Link className={`${s.button} ${s.button_primary} ${s.buttonSmall}`} href={`/papers/${paper.id}`}>Open <Icon name="arrow" /></Link>}{paper.question_count > 0 && <Button tone="quiet" size="small" icon="download" aria-label={`Export ${paper.title} as PDF`} onClick={() => void exportPdf(paper)} />}</div></article>; })}</div> : <EmptyState icon={papers.length ? "search" : "document"} title={papers.length ? "No papers match this view" : "Your paper library starts here"} description={papers.length ? "Try another status or clear your search." : "Create a paper, track its generation, and return here whenever you need it."} action={papers.length ? <Button onClick={() => { setFilter("all"); setSearch(""); }}>Show all papers</Button> : <Link className={`${s.button} ${s.button_primary}`} href="/new-paper">Create your first paper</Link>} />}
     </section>
+    <ReferenceReadyReckoner open={referenceOpen} onClose={() => setReferenceOpen(false)} />
   </section>;
 }

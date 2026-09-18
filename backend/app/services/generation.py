@@ -129,6 +129,144 @@ class GenerationService:
         response = await self.generate(request, slots=[slot], custom_instruction=custom_instruction)
         return response.slots[0]
 
+    async def generate_from_reference(
+        self,
+        request: GenerationRequest,
+        reference_questions: list[dict],
+        reference_images: list[str] | None = None,
+        custom_instruction: str | None = None,
+        on_slot_complete: Callable[[GeneratedSlotResult], Awaitable[None] | None] | None = None,
+        slots: list[GenerationSlot] | None = None,
+        before_slot: Callable[[GenerationSlot], Awaitable[None] | None] | None = None,
+    ) -> GenerationResponse:
+        """Generate structural variations directly from reference image/paper without DB retrieval.
+
+        reference_questions: list of dicts with stem/options/question_type/difficulty/primary_concept etc.
+        reference_images: base64 data URLs for visual grounding (forwarded to LLM).
+        Reuses STRUCTURAL mode regardless of request.generation_mode.
+        """
+        if not self.settings.generation_ready:
+            raise ModelConfigurationError(
+                "Generation is not configured. Set OPENROUTER_API_KEY, GENERATION_MODEL, and VALIDATION_MODEL before generating questions."
+            )
+        if not reference_questions:
+            raise GenerationFailure("No reference questions extracted from the uploaded file.")
+        pending = list(slots if slots is not None else request.build_slots())
+        results: list[GeneratedSlotResult] = []
+
+        # Build synthetic RetrievalCandidate-like dicts for logging/similarity
+        # We bypass real retrieval and inject reference seeds per slot
+        for attempt in range(1, self.settings.max_generation_attempts + 1):
+            if not pending:
+                break
+            candidates, failures = await self._generate_candidates_from_reference(
+                request, pending, attempt, before_slot, custom_instruction, reference_questions, reference_images
+            )
+            candidates, local_failures = await self._deterministically_validate(request, candidates)
+            failures.update(local_failures)
+            validated, validation_failures = await self._llm_validate(request, candidates)
+            failures.update(validation_failures)
+
+            for result in validated:
+                results.append(result)
+                if on_slot_complete:
+                    notification = on_slot_complete(result)
+                    if notification is not None:
+                        await notification
+            pending = [slot for slot in pending if slot.slot in failures]
+            if pending and attempt == self.settings.max_generation_attempts:
+                failed_slot = pending[0]
+                raise GenerationFailure(
+                    f"Reference generation failed for slot {failed_slot.slot} after {attempt} attempts: {failures[failed_slot.slot]}"
+                )
+        results.sort(key=lambda result: result.slot.slot)
+        # Force structural mode for response title
+        return GenerationResponse(title=request.title, generation_mode=GenerationMode.STRUCTURAL, slots=results)
+
+    async def _generate_candidates_from_reference(
+        self,
+        request: GenerationRequest,
+        slots: list[GenerationSlot],
+        attempt: int,
+        before_slot: Callable[[GenerationSlot], Awaitable[None] | None] | None,
+        custom_instruction: str | None,
+        reference_questions: list[dict],
+        reference_images: list[str] | None,
+    ) -> tuple[list[_Candidate], dict[int, str]]:
+        semaphore = asyncio.Semaphore(self.settings.generation_burst_concurrency)
+
+        def _to_candidate_dict(ref: dict) -> dict:
+            return {
+                "source_key": ref.get("source_key") or f"ref-{ref.get('source_question_number', 1)}",
+                "primary_concept": ref.get("primary_concept") or ref.get("topic") or "reference",
+                "question_archetype": ref.get("question_archetype") or "reference",
+                "difficulty": ref.get("difficulty") or 3,
+                "stem": ref.get("stem") or "",
+                "options": ref.get("options") or [],
+            }
+
+        async def produce(slot: GenerationSlot) -> _Candidate:
+            try:
+                if before_slot:
+                    notification = before_slot(slot)
+                    if notification is not None:
+                        await notification
+                async with semaphore:
+                    if before_slot:
+                        notification = before_slot(slot)
+                        if notification is not None:
+                            await notification
+                    # Pick reference cyclically
+                    ref = reference_questions[(slot.slot - 1) % len(reference_questions)]
+                    # Build synthetic RetrievalCandidate for downstream prompt/validation
+                    # Create minimal mock with prompt_payload
+                    @dataclass
+                    class _RefSeed:
+                        id: str
+                        question_json: dict
+                        primary_concept: str
+                        question_archetype: str
+                        difficulty: int
+                        stem: str
+                        options: list[str]
+
+                        def prompt_payload(self):
+                            return {
+                                "source_key": self.id,
+                                "primary_concept": self.primary_concept,
+                                "question_archetype": self.question_archetype,
+                                "difficulty": self.difficulty,
+                                "stem": self.stem,
+                                "options": self.options,
+                            }
+
+                    synthetic = _RefSeed(
+                        id=f"ref-{slot.slot}-{ref.get('source_question_number', slot.slot)}",
+                        question_json={"stem": ref.get("stem"), "options": ref.get("options")},
+                        primary_concept=ref.get("primary_concept") or "reference",
+                        question_archetype=ref.get("question_archetype") or "reference",
+                        difficulty=ref.get("difficulty") or slot.difficulty,
+                        stem=ref.get("stem") or "",
+                        options=ref.get("options") or [],
+                    )
+                    seeds = [synthetic]  # type: ignore
+                    # Merge custom instruction with reference hint
+                    effective_instruction = custom_instruction
+                    if not effective_instruction:
+                        effective_instruction = "Take this paper as reference & generate a structural variation around this based on the paper"
+                    # Tag for prompt image hint
+                    if reference_images:
+                        effective_instruction = f"[reference image attached] {effective_instruction}"
+                    question = await self._generate_question(request, slot, seeds, effective_instruction, reference_images)
+                    similarity = max_seed_similarity(question, seeds)  # against synthetic
+                    # For reference mode we relax similarity check (allow close)
+                    return _Candidate(slot, question, seeds, similarity, attempt)  # type: ignore
+            except (OpenRouterError, ValidationError, GenerationFailure) as error:
+                self._log(request, slot=slot, status="retrying", failure_reason=str(error))
+                raise
+
+        return await self._collect(slots, produce)
+
     async def _generate_candidates(
         self,
         request: GenerationRequest,
@@ -234,7 +372,7 @@ class GenerationService:
         )
         return GeneratedSolution.model_validate(raw)
 
-    async def _generate_question(self, request: GenerationRequest, slot: GenerationSlot, seeds: list[RetrievalCandidate], custom_instruction: str | None = None) -> GeneratedQuestion:
+    async def _generate_question(self, request: GenerationRequest, slot: GenerationSlot, seeds: list[RetrievalCandidate], custom_instruction: str | None = None, reference_images: list[str] | None = None) -> GeneratedQuestion:
         seed_payload = [seed.prompt_payload() for seed in seeds]
         mode = slot.generation_mode or request.generation_mode
         strength = slot.variation_strength or request.variation_strength
@@ -247,6 +385,7 @@ class GenerationService:
                     variation_strength=strength.value, custom_instruction=custom_instruction,
                 ),
                 response_schema=_schema(GeneratedQuestion),
+                images=reference_images,
             )
         else:
             blueprint_raw = await self.client.call_llm(

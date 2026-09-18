@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, BackgroundTasks, HTTPException, Response, status
+from fastapi import APIRouter, BackgroundTasks, File, Form, HTTPException, Response, UploadFile, status
 from fastapi.responses import FileResponse
 
 from app.schemas.papers import (
@@ -48,6 +48,65 @@ def list_papers() -> dict:
 @router.post("", status_code=status.HTTP_201_CREATED)
 def create_paper(request: PaperCreateRequest) -> dict:
     return PaperService().create(request)
+
+
+@router.post("/from-reference", status_code=status.HTTP_201_CREATED)
+async def create_from_reference(
+    background_tasks: BackgroundTasks,
+    file: UploadFile = File(...),
+    title: str = Form(default=""),
+    desired_count: int = Form(default=5),
+    custom_instruction: str = Form(default=""),
+    variation_strength: str = Form(default="balanced"),
+    exam: str = Form(default=""),
+    subject: str = Form(default=""),
+) -> dict:
+    try:
+        # No cap per user request - allow whole paper (e.g. JEE mains 90 Qs); guard only by sane upper bound 200 to avoid runaway
+        if desired_count < 1:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="desired_count must be at least 1")
+        if desired_count > 200:
+            # Still honor "no cap" but prevent accidental 10k request
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="desired_count too large (max 200)")
+        content = await file.read()
+        filename = file.filename or "reference-paper"
+        content_type = file.content_type
+
+        from app.services.reference import extract_reference_questions
+
+        reference_questions, reference_images = await extract_reference_questions(
+            filename=filename, content_type=content_type, content=content, custom_instruction=custom_instruction
+        )
+
+        # Allow caller to override count with actual extracted count if they sent 0? Already handled
+        # Reuse STRUCTURAL mode via create_reference_paper
+        paper_title = title.strip() or f"Reference — {filename[:40]}"
+        paper = PaperService().create_reference_paper(
+            title=paper_title,
+            exam=exam.strip(),
+            subject=subject.strip(),
+            reference_questions=reference_questions,
+            reference_images=reference_images,
+            custom_instruction=custom_instruction,
+            desired_count=desired_count,
+            variation_strength=variation_strength,
+        )
+        job = PaperService().queue_initial_generation(paper["id"])
+        background_tasks.add_task(_run_initial_generation, paper["id"], job["id"])
+        # Return fresh paper with job
+        return PaperService().get(paper["id"])
+    except HTTPException:
+        raise
+    except (PaperConflictError, PaperNotFoundError) as error:
+        _raise(error)
+    except Exception as error:
+        # Use same mapping as other generation errors
+        if isinstance(error, ModelConfigurationError):
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(error)) from error
+        if isinstance(error, (GenerationFailure, RetrievalError)):
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
+        # For reference extraction errors, surface as 422
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(error)) from error
 
 
 @router.get("/{paper_id}")

@@ -66,6 +66,7 @@ export const api = {
   ingestionJobs: (signal?: AbortSignal) => apiRequest<{ items: IngestionJob[] }>("/questions/ingestion-jobs", { signal }),
   deleteIngestionJob: (id: string) => apiRequest<void>(`/questions/ingestion-jobs/${id}`, { method: "DELETE" }),
   ingest: (body: FormData) => apiRequest<{ job: IngestionJob }>("/questions/ingest", { method: "POST", body }),
+  createReferencePaper: (body: FormData) => apiRequest<Paper>("/papers/from-reference", { method: "POST", body }),
   questions: (query: URLSearchParams) => apiRequest<{ items: SeedQuestion[]; total: number; offset: number }>(`/questions?${query}`),
   question: (id: string) => apiRequest<SeedQuestion>(`/questions/${id}`),
   brandingProfiles: () => apiRequest<{ items: BrandingProfile[] }>("/branding-profiles"),

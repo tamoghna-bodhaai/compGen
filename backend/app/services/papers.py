@@ -268,13 +268,27 @@ class PaperService:
             "missing_seed_question_ids": [seed_id for seed_id in ordered_ids if seed_id not in by_id],
         }
 
+    @staticmethod
+    def _core_generation_request(config: dict) -> GenerationRequest:
+        core = {k: v for k, v in config.items() if k in GenerationRequest.model_fields}
+        return GenerationRequest.model_validate(core)
+
     async def generate_initial(self, paper_id: str, generation_service: GenerationService | None = None) -> dict:
         paper = self.get(paper_id)
         if paper["questions"]:
             raise PaperConflictError("This paper already has questions. Use selected or unlocked regeneration instead.")
-        request = GenerationRequest.model_validate(paper["generation_config"])
+        request = self._core_generation_request(paper["generation_config"])
         section_ids = self._ensure_plan_sections(paper_id, request)
-        generated = await (generation_service or GenerationService()).generate(request)
+        # Reference-image mode: stored inside generation_config
+        ref_questions = paper["generation_config"].get("reference_questions")
+        ref_images = paper["generation_config"].get("reference_images")
+        custom_instruction = paper["generation_config"].get("reference_custom_instruction")
+        if ref_questions:
+            generated = await (generation_service or GenerationService()).generate_from_reference(
+                request, ref_questions, ref_images, custom_instruction
+            )
+        else:
+            generated = await (generation_service or GenerationService()).generate(request)
         for result in generated.slots:
             self._store_generated_result(paper_id, result, section_id=section_ids.get(result.slot.section_title or ""))
         self.update(paper_id, PaperUpdateRequest(status="generated"))
@@ -285,7 +299,7 @@ class PaperService:
         current_job = paper.get("generation_job")
         if current_job and current_job["state"] in {"queued", "running"}:
             raise PaperConflictError("This paper already has a generation job in progress.")
-        request = GenerationRequest.model_validate(paper["generation_config"])
+        request = self._core_generation_request(paper["generation_config"])
         slots = request.build_slots()
         completed_slots = self._completed_initial_slots(paper) & {slot.slot for slot in slots}
         if paper["questions"] and len(completed_slots) != len(paper["questions"]):
@@ -307,13 +321,110 @@ class PaperService:
             raise
         return self._generation_job(job_id)
 
+    def create_reference_paper(
+        self,
+        title: str,
+        exam: str,
+        subject: str,
+        reference_questions: list[dict],
+        reference_images: list[str],
+        custom_instruction: str | None,
+        desired_count: int,
+        variation_strength: str = "balanced",
+    ) -> dict:
+        """Create a paper backed by reference image/paper for structural variation.
+
+        Reuses STRUCTURAL mode (per user request). No cap on desired_count.
+        Stores reference_questions/images inside generation_config for background job.
+        """
+        from app.schemas.generation import GenerationMode, QuestionType, VariationStrength
+
+        if not reference_questions:
+            raise PaperConflictError("No reference questions could be extracted from the upload.")
+
+        # If exam/subject not provided, infer from most common reference
+        if not exam:
+            exams = [q.get("exam") for q in reference_questions if q.get("exam")]
+            exam = max(set(exams), key=exams.count) if exams else "JEE"
+        if not subject:
+            subjects = [q.get("subject") for q in reference_questions if q.get("subject")]
+            subject = max(set(subjects), key=subjects.count) if subjects else "Physics"
+
+        # Derive per-slot types/difficulties by cycling reference
+        slots_meta: list[tuple[str, int]] = []
+        for i in range(desired_count):
+            ref = reference_questions[i % len(reference_questions)]
+            qtype = ref.get("question_type") or "single_correct_mcq"
+            # Normalize to valid enum
+            try:
+                QuestionType(qtype)
+            except Exception:
+                qtype = "single_correct_mcq"
+            diff = ref.get("difficulty") or 3
+            try:
+                diff = int(diff)
+                if not 1 <= diff <= 5:
+                    diff = 3
+            except Exception:
+                diff = 3
+            slots_meta.append((qtype, diff))
+
+        # Build aggregated counts for GenerationRequest validation
+        from collections import Counter
+
+        type_counter = Counter(t for t, _ in slots_meta)
+        diff_counter = Counter(d for _, d in slots_meta)
+        # Map difficulty to bands for legacy GenerationRequest difficulty_distribution
+        # Use actual ints 1-5 as stored
+        question_types = [{"type": k, "count": v} for k, v in type_counter.items()]
+        difficulty_distribution = [{"difficulty": k, "count": v} for k, v in diff_counter.items()]
+
+        # Validate variation_strength
+        try:
+            VariationStrength(variation_strength)
+        except Exception:
+            variation_strength = "balanced"
+
+        generation_config: dict = {
+            "title": title,
+            "exam": exam,
+            "subject": subject,
+            "chapters": list({q.get("chapter") for q in reference_questions if q.get("chapter")}),
+            "topics": list({q.get("topic") for q in reference_questions if q.get("topic")}),
+            "subtopics": list({q.get("subtopic") for q in reference_questions if q.get("subtopic")}),
+            "concepts": [],
+            "question_types": question_types,
+            "difficulty_distribution": difficulty_distribution,
+            "generation_mode": GenerationMode.STRUCTURAL.value,
+            "variation_strength": variation_strength,
+            "subtopic_plans": None,
+            # Reference mode extension (preserved for job, not part of schema validation via extra="allow"?)
+            "reference_questions": reference_questions,
+            "reference_images": reference_images,
+            "reference_custom_instruction": (custom_instruction or "").strip() or "Take this paper as reference & generate a structural variation around this based on the paper",
+            "reference_source_name": f"reference-{title}",
+        }
+
+        # Validate core fields via GenerationRequest but allow extra keys
+        # GenerationRequest will ignore extra keys if we validate then re-add them
+        core = {k: v for k, v in generation_config.items() if k in GenerationRequest.model_fields}
+        GenerationRequest.model_validate(core)  # raise if invalid
+
+        paper_id, now = str(uuid.uuid4()), _now()
+        with get_connection() as connection:
+            connection.execute(
+                "INSERT INTO papers (id, title, exam, subject, generation_config, branding_config, branding_template_id, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (paper_id, title, exam, subject, json.dumps(generation_config), "{}", None, "draft", now, now),
+            )
+        return self.get(paper_id)
+
     async def run_initial_generation_job(self, paper_id: str, job_id: str) -> None:
         self._register_job_task(job_id)
         try:
             await self._wait_until_job_can_continue(job_id)
             self._update_generation_job(job_id, state="running", message="Generating and independently validating questions", started=True)
             paper = self.get(paper_id)
-            request = GenerationRequest.model_validate(paper["generation_config"])
+            request = self._core_generation_request(paper["generation_config"])
             all_slots = request.build_slots()
             completed_slots = self._completed_initial_slots(paper) & {slot.slot for slot in all_slots}
             if paper["questions"] and len(completed_slots) != len(paper["questions"]):
@@ -338,12 +449,26 @@ class PaperService:
                     message=f"Validated {completed} of {job['total_questions']} questions",
                 )
 
-            await GenerationService().generate(
-                request,
-                on_slot_complete=report_progress,
-                slots=missing_slots,
-                before_slot=lambda _: self._wait_until_job_can_continue(job_id),
-            )
+            ref_questions = paper["generation_config"].get("reference_questions")
+            ref_images = paper["generation_config"].get("reference_images")
+            ref_instruction = paper["generation_config"].get("reference_custom_instruction")
+            if ref_questions:
+                await GenerationService().generate_from_reference(
+                    request,
+                    reference_questions=ref_questions,
+                    reference_images=ref_images,
+                    custom_instruction=ref_instruction,
+                    on_slot_complete=report_progress,
+                    slots=missing_slots,
+                    before_slot=lambda _: self._wait_until_job_can_continue(job_id),
+                )
+            else:
+                await GenerationService().generate(
+                    request,
+                    on_slot_complete=report_progress,
+                    slots=missing_slots,
+                    before_slot=lambda _: self._wait_until_job_can_continue(job_id),
+                )
             self.update(paper_id, PaperUpdateRequest(status="generated"))
             self._update_generation_job(
                 job_id,
