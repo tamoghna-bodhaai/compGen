@@ -1,0 +1,371 @@
+from __future__ import annotations
+
+import io
+import re
+import uuid
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any, Awaitable, Callable
+
+from docx import Document
+
+from pydantic import ValidationError
+
+from app.core.settings import get_settings
+from app.prompts.ingestion import INGESTION_SYSTEM_PROMPT, build_ingestion_prompt
+from app.schemas.ingestion import ClassificationResponse
+from app.db.database import get_connection
+from app.services.openrouter import ModelConfigurationError, OpenRouterClient, OpenRouterError
+from app.services.seed_import import upsert_questions
+
+MAX_UPLOAD_BYTES = 35 * 1024 * 1024
+MAX_CHUNK_CHARACTERS = 28_000
+OCR_RENDER_DPI = 300
+OCR_TIMEOUT_SECONDS = 30
+
+
+class IngestionError(RuntimeError):
+    """Raised for source extraction or classification errors safe to show to teachers."""
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+@dataclass(frozen=True)
+class ExtractedSource:
+    name: str
+    pages: list[tuple[int | None, str]]
+
+
+def _extract_pdf_with_pypdf(content: bytes) -> list[tuple[int | None, str]]:
+    from pypdf import PdfReader
+
+    reader = PdfReader(io.BytesIO(content))
+    return [(number, (page.extract_text() or "").strip()) for number, page in enumerate(reader.pages, 1)]
+
+
+def _extract_pdf_with_pymupdf(content: bytes) -> list[tuple[int | None, str]]:
+    import fitz  # PyMuPDF
+
+    doc = fitz.open(stream=content, filetype="pdf")
+    try:
+        return [(number, (page.get_text() or "").strip()) for number, page in enumerate(doc, 1)]
+    finally:
+        doc.close()
+
+
+def _extract_pdf_with_ocr(content: bytes) -> list[tuple[int | None, str]]:
+    """Render a scanned PDF page-by-page and extract text with local Tesseract.
+
+    This deliberately runs only after the native PDF extractors produce no
+    usable text. Rendering one page at a time bounds memory use for a 35 MB
+    upload while retaining the source page number for the classifier.
+    """
+    import fitz  # PyMuPDF
+    from PIL import Image
+    import pytesseract
+
+    scale = OCR_RENDER_DPI / 72
+    document = fitz.open(stream=content, filetype="pdf")
+    try:
+        pages: list[tuple[int | None, str]] = []
+        for number, page in enumerate(document, 1):
+            pixmap = page.get_pixmap(matrix=fitz.Matrix(scale, scale), alpha=False)
+            with Image.open(io.BytesIO(pixmap.tobytes("png"))) as image:
+                text = pytesseract.image_to_string(
+                    image,
+                    lang="eng",
+                    config="--oem 1 --psm 6",
+                    timeout=OCR_TIMEOUT_SECONDS,
+                ).strip()
+            pages.append((number, text))
+        return pages
+    finally:
+        document.close()
+
+
+def _best_pdf_pages(content: bytes) -> list[tuple[int | None, str]]:
+    """Extract PDF pages with pypdf first, falling back to PyMuPDF when text is sparse.
+
+    Many digital PDFs use CID fonts or XObjects that pypdf renders as empty
+    strings while PyMuPDF (fitz) still extracts them. We pick the extractor
+    with the most total characters when the pypdf result looks empty.
+    """
+
+    pypdf_pages: list[tuple[int | None, str]] | None = None
+    pypdf_error: Exception | None = None
+    try:
+        pypdf_pages = _extract_pdf_with_pypdf(content)
+    except Exception as error:  # noqa: BLE001 - pypdf exposes multiple types
+        pypdf_error = error
+        pypdf_pages = []
+
+    pypdf_chars = sum(len(text) for _, text in (pypdf_pages or []) if text)
+    pypdf_non_empty = len([text for _, text in (pypdf_pages or []) if text])
+    total_pages = len(pypdf_pages or [])
+
+    should_try_mupdf = False
+    if pypdf_error is not None:
+        should_try_mupdf = True
+    elif not pypdf_pages or pypdf_non_empty == 0:
+        should_try_mupdf = True
+    else:
+        avg_chars = pypdf_chars / total_pages if total_pages else 0
+        coverage = pypdf_non_empty / total_pages if total_pages else 0
+        if avg_chars < 20 or coverage < 0.5 or pypdf_chars < 100:
+            should_try_mupdf = True
+
+    selected_pages = pypdf_pages or []
+    if should_try_mupdf:
+        try:
+            mupdf_pages = _extract_pdf_with_pymupdf(content)
+        except ImportError:
+            if pypdf_error is not None:
+                raise pypdf_error
+            mupdf_pages = []
+        except Exception:
+            if pypdf_error is not None:
+                raise pypdf_error
+            mupdf_pages = []
+
+        mupdf_chars = sum(len(text) for _, text in mupdf_pages if text)
+        # Prefer the extractor that yielded more selectable text.
+        if mupdf_chars > pypdf_chars and any(text for _, text in mupdf_pages):
+            selected_pages = mupdf_pages
+        elif pypdf_error is not None and any(text for _, text in mupdf_pages):
+            selected_pages = mupdf_pages
+        elif any(text for _, text in mupdf_pages) and not any(text for _, text in selected_pages):
+            selected_pages = mupdf_pages
+
+    if any(text for _, text in selected_pages):
+        return selected_pages
+
+    # Scanned PDFs have no embedded text layer. OCR is intentionally the last
+    # fallback: it is slower and less exact for mathematical notation, but it
+    # makes otherwise unreadable question sets available for teacher review.
+    try:
+        ocr_pages = _extract_pdf_with_ocr(content)
+    except Exception:  # OCR must not prevent the standard extraction failure message.
+        return selected_pages
+    return ocr_pages if any(text for _, text in ocr_pages) else selected_pages
+
+
+def extract_source(*, filename: str, content_type: str | None, content: bytes, source_text: str) -> ExtractedSource:
+    if source_text.strip():
+        return ExtractedSource(filename or "pasted-question.txt", [(None, source_text.strip())])
+    if not content:
+        raise IngestionError("Paste question text or upload a PDF or DOCX file.")
+    if len(content) > MAX_UPLOAD_BYTES:
+        raise IngestionError("Uploads must be 35 MB or smaller.")
+    suffix = Path(filename).suffix.lower()
+    if suffix == ".pdf" or content_type == "application/pdf":
+        try:
+            pages = _best_pdf_pages(content)
+        except Exception as error:  # extraction libraries expose several exception types
+            raise IngestionError("This PDF could not be read. Upload a text-based PDF or paste its question text.") from error
+    elif suffix == ".docx" or content_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+        try:
+            document = Document(io.BytesIO(content))
+            parts = [paragraph.text.strip() for paragraph in document.paragraphs if paragraph.text.strip()]
+            for table in document.tables:
+                parts.extend(cell.text.strip() for row in table.rows for cell in row.cells if cell.text.strip())
+            pages = [(None, "\n".join(parts))]
+        except Exception as error:
+            raise IngestionError("This DOCX could not be read. Paste its question text instead.") from error
+    else:
+        raise IngestionError("Supported uploads are PDF and DOCX. For a single question, paste its text.")
+    pages = [(page, text) for page, text in pages if text]
+    if not pages:
+        raise IngestionError(
+            "No readable text was found in this PDF. The file may be scanned, use an unsupported font encoding, "
+            "or contain images too unclear for OCR. Try a clearer text-based PDF, or paste the question text. "
+            "(Tried pypdf, PyMuPDF, and local OCR.)"
+        )
+    return ExtractedSource(filename or "uploaded-source", pages)
+
+
+def chunk_source(source: ExtractedSource) -> list[str]:
+    chunks: list[str] = []
+    buffer = ""
+    for page, text in source.pages:
+        prefix = f"[Source page {page}]\n" if page else ""
+        remaining = f"{prefix}{text}\n"
+        while remaining:
+            available = MAX_CHUNK_CHARACTERS - len(buffer)
+            if len(remaining) <= available:
+                buffer += remaining
+                break
+            if buffer:
+                chunks.append(buffer)
+                buffer = ""
+                continue
+            split_at = max(1, remaining.rfind("\n", 0, MAX_CHUNK_CHARACTERS))
+            chunks.append(remaining[:split_at])
+            remaining = remaining[split_at:]
+    if buffer:
+        chunks.append(buffer)
+    return chunks
+
+
+class QuestionIngestionService:
+    @staticmethod
+    def recover_interrupted_jobs() -> None:
+        """Background ingestion is process-local; surface interrupted work honestly."""
+        now = _now()
+        with get_connection() as connection:
+            connection.execute(
+                "UPDATE ingestion_jobs SET state = 'failed', phase = 'failed', message = 'Ingestion stopped because the backend restarted.', "
+                "error_message = '', finished_at = ?, updated_at = ? WHERE state IN ('queued', 'running')",
+                (now, now),
+            )
+
+    def create_job(self, source_name: str) -> dict:
+        job_id, now = str(uuid.uuid4()), _now()
+        with get_connection() as connection:
+            connection.execute(
+                "INSERT INTO ingestion_jobs (id, source_name, state, phase, message, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+                (job_id, source_name or "pasted-question.txt", "queued", "queued", "Queued for ingestion", now, now),
+            )
+        return self.get_job(job_id)
+
+    def get_job(self, job_id: str) -> dict:
+        with get_connection() as connection:
+            row = connection.execute("SELECT * FROM ingestion_jobs WHERE id = ?", (job_id,)).fetchone()
+        if row is None:
+            raise IngestionError("Ingestion job not found.")
+        return dict(row)
+
+    def list_jobs(self, limit: int = 20) -> list[dict]:
+        with get_connection() as connection:
+            rows = connection.execute("SELECT * FROM ingestion_jobs ORDER BY created_at DESC LIMIT ?", (limit,)).fetchall()
+        return [dict(row) for row in rows]
+
+    def _update_job(self, job_id: str, *, state: str | None = None, phase: str | None = None, message: str | None = None,
+                    total_chunks: int | None = None, completed_chunks: int | None = None, ingested_questions: int | None = None,
+                    error_message: str | None = None, started: bool = False, finished: bool = False) -> None:
+        updates: dict[str, Any] = {"updated_at": _now()}
+        for key, value in (("state", state), ("phase", phase), ("message", message), ("total_chunks", total_chunks),
+                           ("completed_chunks", completed_chunks), ("ingested_questions", ingested_questions), ("error_message", error_message)):
+            if value is not None:
+                updates[key] = value
+        if started:
+            updates["started_at"] = updates["updated_at"]
+        if finished:
+            updates["finished_at"] = updates["updated_at"]
+        with get_connection() as connection:
+            assignments = ", ".join(f"{key} = ?" for key in updates)
+            connection.execute(f"UPDATE ingestion_jobs SET {assignments} WHERE id = ?", [*updates.values(), job_id])
+
+    async def run_job(self, job_id: str, *, filename: str, content_type: str | None, content: bytes, source_text: str, conversion_note: str) -> None:
+        self._update_job(job_id, state="running", phase="extracting", message="Extracting readable text", started=True)
+
+        async def progress(phase: str, message: str, total_chunks: int | None = None, completed_chunks: int | None = None) -> None:
+            self._update_job(job_id, phase=phase, message=message, total_chunks=total_chunks, completed_chunks=completed_chunks)
+
+        try:
+            result = await self.ingest(filename=filename, content_type=content_type, content=content, source_text=source_text,
+                                       conversion_note=conversion_note, on_progress=progress)
+            self._update_job(job_id, state="succeeded", phase="complete", message="Ingestion complete", ingested_questions=result["questions"], finished=True)
+        except Exception as error:  # Background work must surface a user-safe failure state.
+            self._update_job(job_id, state="failed", phase="failed", message="Ingestion needs attention", error_message=str(error), finished=True)
+
+    async def ingest(
+        self,
+        *,
+        filename: str,
+        content_type: str | None,
+        content: bytes,
+        source_text: str,
+        conversion_note: str,
+        on_progress: Callable[[str, str, int | None, int | None], Awaitable[None] | None] | None = None,
+    ) -> dict:
+        source = extract_source(filename=filename, content_type=content_type, content=content, source_text=source_text)
+        chunks = chunk_source(source)
+        if on_progress:
+            notification = on_progress("classifying", f"Classifying 0 of {len(chunks)} source chunks", len(chunks), 0)
+            if notification is not None:
+                await notification
+        settings = get_settings()
+        primary_model = settings.classification_model or settings.generation_model
+        fallback_model = settings.classification_fallback_model
+        # Dedicated ingestion/classification models: primary is user-configurable
+        # via CLASSIFICATION_MODEL (e.g. google/gemini-flash-3.5), fallback via
+        # CLASSIFICATION_FALLBACK_MODEL. Generation/validation models stay separate.
+        client = OpenRouterClient(settings)
+        collection_id = f"ingested-{uuid.uuid4().hex[:12]}"
+        normalized: list[dict] = []
+        for chunk_number, chunk in enumerate(chunks, 1):
+            models_to_try: list[str | None] = []
+            if primary_model:
+                models_to_try.append(primary_model)
+            if fallback_model and fallback_model not in models_to_try:
+                models_to_try.append(fallback_model)
+            if not models_to_try:
+                models_to_try = [None]
+
+            classified: ClassificationResponse | None = None
+            last_error: Exception | None = None
+            for attempt_model in models_to_try:
+                try:
+                    response = await client.call_llm(
+                        model=attempt_model,
+                        system_prompt=INGESTION_SYSTEM_PROMPT,
+                        user_prompt=build_ingestion_prompt(
+                            source_name=source.name, conversion_note=conversion_note.strip(), source_text=chunk
+                        ),
+                        response_schema=ClassificationResponse.model_json_schema(),
+                        temperature=0.1,
+                        max_tokens=8_000,
+                    )
+                    classified = ClassificationResponse.model_validate(response)
+                    break
+                except ModelConfigurationError:
+                    # Missing API key/model config is not retryable across fallback
+                    raise
+                except (OpenRouterError, ValidationError, ValueError) as error:
+                    last_error = error
+                    if attempt_model == models_to_try[-1]:
+                        break
+                    # Retry with next model (fallback) - transient provider or schema error
+                    continue
+            if classified is None:
+                if isinstance(last_error, OpenRouterError):
+                    raise last_error
+                if last_error is not None:
+                    raise OpenRouterError(str(last_error)) from last_error
+                raise OpenRouterError("Classification failed with no response.")
+            for question in classified.questions:
+                index = len(normalized) + 1
+                record = question.model_dump()
+                record.update({
+                    "source_key": f"{collection_id}-q{index:04d}",
+                    "source_reference": f"{source.name} - page {question.source_page or 'not stated'}, question {question.source_question_number}",
+                    "question_json": {"stem": question.stem, "options": question.options},
+                    "answer_json": {"correct_answer": question.correct_answer} if question.correct_answer else None,
+                    "source": source.name,
+                    "verification_status": "pending_review",
+                })
+                for key in ("stem", "options", "correct_answer", "source_question_number", "source_page"):
+                    record.pop(key, None)
+                normalized.append(record)
+            if on_progress:
+                notification = on_progress("classifying", f"Classified {chunk_number} of {len(chunks)} source chunks", len(chunks), chunk_number)
+                if notification is not None:
+                    await notification
+        if not normalized:
+            raise IngestionError("No readable questions were found in this source.")
+        if on_progress:
+            notification = on_progress("saving", f"Saving {len(normalized)} classified questions", len(chunks), len(chunks))
+            if notification is not None:
+                await notification
+        inserted, updated = upsert_questions(normalized)
+        return {
+            "collection_id": collection_id,
+            "source": source.name,
+            "inserted": inserted,
+            "updated": updated,
+            "questions": len(normalized),
+            "verification_status": "pending_review",
+        }

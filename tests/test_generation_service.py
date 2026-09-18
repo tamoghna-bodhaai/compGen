@@ -1,0 +1,174 @@
+from __future__ import annotations
+
+import asyncio
+import os
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT_DIR = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT_DIR / "backend"))
+
+from app.core.settings import Settings
+from app.schemas.generation import GeneratedQuestion, GeneratedSolution, GenerationRequest
+from app.services.generation import GenerationService
+from app.services.openrouter import repair_decoded_latex_escapes, strict_json_schema
+from app.services.seed_import import upsert_seed_questions
+
+
+class FakeOpenRouterClient:
+    def __init__(self) -> None:
+        self.calls: list[str] = []
+        self.prompts: list[str] = []
+
+    async def call_llm(self, *, system_prompt: str, user_prompt: str, **_: object) -> dict:
+        self.calls.append(system_prompt)
+        self.prompts.append(user_prompt)
+        if "assessment planner" in system_prompt:
+            return {
+                "primary_concept": "symmetry of definite integrals",
+                "archetype": "functional_symmetry_integral",
+                "setup": "continuous functions over a symmetric interval",
+                "unknown": "a parameter in the integrand",
+                "reasoning_steps": ["apply symmetry", "evaluate the reduced integral"],
+                "difficulty": 3,
+                "question_type": "single_correct_mcq",
+            }
+        if "independent JEE examination validator" in system_prompt:
+            return {
+                "valid": True,
+                "independent_answer": "B",
+                "matches_generated_answer": True,
+                "ambiguous": False,
+                "multiple_answers_possible": False,
+                "sufficient_information": True,
+                "concept_match": True,
+                "difficulty_match": True,
+                "comments": "",
+            }
+        return {
+            "question_type": "single_correct_mcq",
+            "stem": "Evaluate $\\int_{-1}^{1}(x^2+3)\\,dx$.",
+            "options": ["$4$", "$20/3$", "$8$", "$10/3$"],
+            "correct_answer": "B",
+            "solution": "$\\int_{-1}^{1}x^2dx=2/3$ and $\\int_{-1}^{1}3dx=6$, so the answer is $20/3$.",
+            "primary_concept": "symmetry of definite integrals",
+            "secondary_concepts": [],
+            "difficulty": 3,
+            "estimated_time_minutes": 3,
+            "marks": 3,
+        }
+
+
+def request_for(mode: str) -> GenerationRequest:
+    return GenerationRequest.model_validate(
+        {
+            "title": "Definite Integral Practice",
+            "exam": "JEE",
+            "subject": "Mathematics",
+            "chapters": ["Calculus"],
+            "topics": ["Definite Integrals"],
+            "concepts": ["symmetry of definite integrals"],
+            "question_types": [{"type": "single_correct_mcq", "count": 1}],
+            "difficulty_distribution": [{"difficulty": 3, "count": 1}],
+            "generation_mode": mode,
+        }
+    )
+
+
+class GenerationServiceTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temporary_directory = tempfile.TemporaryDirectory()
+        self.database_path = Path(self.temporary_directory.name) / "questions.db"
+        self.previous_database_url = os.environ.get("DATABASE_URL")
+        os.environ["DATABASE_URL"] = f"sqlite:///{self.database_path}"
+        upsert_seed_questions(ROOT_DIR / "sample_data" / "jee_definite_integrals_questions.json", self.database_path)
+        self.settings = Settings("test", "generator", "validator", None, None, 3, 3, 0.90)
+
+    def tearDown(self) -> None:
+        if self.previous_database_url is None:
+            os.environ.pop("DATABASE_URL", None)
+        else:
+            os.environ["DATABASE_URL"] = self.previous_database_url
+        self.temporary_directory.cleanup()
+
+    def test_structural_pipeline_generates_then_validates(self) -> None:
+        client = FakeOpenRouterClient()
+        result = asyncio.run(GenerationService(settings=self.settings, client=client).generate(request_for("structural_variation")))
+        self.assertEqual(len(result.slots), 1)
+        self.assertTrue(result.slots[0].validation.valid)
+        self.assertEqual(len(client.calls), 2)
+        self.assertFalse(any("assessment planner" in call for call in client.calls))
+
+    def test_concept_pipeline_builds_blueprint_before_generation(self) -> None:
+        client = FakeOpenRouterClient()
+        result = asyncio.run(GenerationService(settings=self.settings, client=client).generate(request_for("concept_variation")))
+        self.assertEqual(result.slots[0].question.correct_answer, "B")
+        self.assertEqual(len(client.calls), 3)
+        self.assertTrue(any("assessment planner" in call for call in client.calls))
+
+    def test_custom_regeneration_instruction_reaches_generation_prompts(self) -> None:
+        for mode in ("structural_variation", "concept_variation"):
+            client = FakeOpenRouterClient()
+            asyncio.run(GenerationService(settings=self.settings, client=client).generate(
+                request_for(mode), custom_instruction="Use a kinematics-style setup."
+            ))
+            self.assertTrue(any("Use a kinematics-style setup." in prompt for prompt in client.prompts))
+
+    def test_subtopic_plans_build_sectioned_slots(self) -> None:
+        request = GenerationRequest.model_validate(
+            {
+                "title": "Mixed",
+                "exam": "JEE",
+                "subject": "Mathematics",
+                "chapters": ["Calculus"],
+                "topics": ["Definite Integrals"],
+                "subtopics": ["Properties", "Area"],
+                "question_types": [{"type": "single_correct_mcq", "count": 3}],
+                "difficulty_distribution": [{"difficulty": 3, "count": 2}, {"difficulty": 1, "count": 1}],
+                "generation_mode": "structural_variation",
+                "subtopic_plans": [
+                    {
+                        "topic": "Definite Integrals", "subtopic": "Properties",
+                        "question_types": [{"type": "single_correct_mcq", "count": 2}],
+                        "difficulty_distribution": [{"difficulty": 3, "count": 2}],
+                        "generation_mode": "structural_variation", "variation_strength": "close",
+                    },
+                    {
+                        "topic": "Definite Integrals", "subtopic": "Area",
+                        "question_types": [{"type": "single_correct_mcq", "count": 1}],
+                        "difficulty_distribution": [{"difficulty": 1, "count": 1}],
+                        "generation_mode": "concept_variation", "variation_strength": "high",
+                    },
+                ],
+            }
+        )
+        slots = request.build_slots()
+        self.assertEqual(len(slots), 3)
+        self.assertEqual(request.requested_total(), 3)
+        self.assertEqual([slot.subtopic for slot in slots], ["Properties", "Properties", "Area"])
+        self.assertEqual(slots[0].section_title, "Definite Integrals › Properties")
+        self.assertEqual(slots[2].generation_mode, "concept_variation")
+
+    def test_strict_schema_requires_defaulted_fields(self) -> None:
+        schema = strict_json_schema(GeneratedQuestion.model_json_schema())
+        self.assertEqual(set(schema["required"]), set(schema["properties"]))
+        self.assertFalse(schema["additionalProperties"])
+
+    def test_solution_schema_requires_answer_and_working(self) -> None:
+        schema = strict_json_schema(GeneratedSolution.model_json_schema())
+        self.assertEqual(set(schema["required"]), set(schema["properties"]))
+
+    def test_repairs_latex_commands_decoded_as_json_control_characters(self) -> None:
+        repaired = repair_decoded_latex_escapes(
+            {"solution": "Use \frac{1}{2}, \tan x, \begin{aligned}x\right, and \asqrt{2}."}
+        )
+        self.assertEqual(
+            repaired["solution"],
+            r"Use \frac{1}{2}, \tan x, \begin{aligned}x\right, and \sqrt{2}.",
+        )
+
+
+if __name__ == "__main__":
+    unittest.main()

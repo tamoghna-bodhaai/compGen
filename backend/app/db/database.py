@@ -1,0 +1,177 @@
+from __future__ import annotations
+
+import json
+import os
+import sqlite3
+from contextlib import contextmanager
+from pathlib import Path
+from typing import Iterator
+
+ROOT_DIR = Path(__file__).resolve().parents[3]
+DEFAULT_DATABASE_PATH = ROOT_DIR / "backend" / "data" / "question_generator.db"
+
+SQLITE_SCHEMA = """
+CREATE TABLE IF NOT EXISTS questions (
+    id TEXT PRIMARY KEY,
+    source_key TEXT UNIQUE NOT NULL,
+    exam TEXT NOT NULL,
+    class_level TEXT,
+    subject TEXT NOT NULL,
+    chapter TEXT,
+    topic TEXT,
+    subtopic TEXT,
+    primary_concept TEXT,
+    secondary_concepts TEXT NOT NULL,
+    question_archetype TEXT,
+    question_type TEXT NOT NULL,
+    difficulty INTEGER NOT NULL CHECK (difficulty BETWEEN 1 AND 5),
+    question_json TEXT NOT NULL,
+    answer_json TEXT,
+    solution TEXT,
+    expected_time_minutes INTEGER,
+    marks INTEGER,
+    source TEXT,
+    source_reference TEXT,
+    verification_status TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS questions_retrieval_metadata_idx
+    ON questions (exam, subject, chapter, topic, question_type, difficulty);
+CREATE TABLE IF NOT EXISTS generation_logs (
+    id TEXT PRIMARY KEY,
+    request_json TEXT NOT NULL,
+    generation_mode TEXT NOT NULL,
+    model TEXT,
+    status TEXT NOT NULL,
+    failure_reason TEXT,
+    seed_question_ids TEXT NOT NULL,
+    validation_result_json TEXT,
+    similarity_score REAL,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS papers (
+    id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    exam TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    generation_config TEXT NOT NULL,
+    branding_config TEXT NOT NULL DEFAULT '{}',
+    status TEXT NOT NULL CHECK (status IN ('draft', 'generated', 'final')),
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS paper_generation_jobs (
+    id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+    operation TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('queued', 'running', 'succeeded', 'failed')),
+    control_state TEXT NOT NULL DEFAULT 'active',
+    total_questions INTEGER NOT NULL,
+    completed_questions INTEGER NOT NULL DEFAULT 0,
+    message TEXT,
+    error_message TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS paper_generation_jobs_paper_idx
+    ON paper_generation_jobs (paper_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS paper_generation_jobs_active_paper_idx
+    ON paper_generation_jobs (paper_id)
+    WHERE state IN ('queued', 'running');
+CREATE TABLE IF NOT EXISTS ingestion_jobs (
+    id TEXT PRIMARY KEY,
+    source_name TEXT NOT NULL,
+    state TEXT NOT NULL CHECK (state IN ('queued', 'running', 'succeeded', 'failed')),
+    phase TEXT NOT NULL,
+    message TEXT,
+    total_chunks INTEGER NOT NULL DEFAULT 0,
+    completed_chunks INTEGER NOT NULL DEFAULT 0,
+    ingested_questions INTEGER NOT NULL DEFAULT 0,
+    error_message TEXT,
+    created_at TEXT NOT NULL,
+    started_at TEXT,
+    finished_at TEXT,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS ingestion_jobs_created_idx ON ingestion_jobs (created_at DESC);
+CREATE TABLE IF NOT EXISTS branding_profiles (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL UNIQUE,
+    branding_config TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS paper_sections (
+    id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+    title TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS paper_questions (
+    id TEXT PRIMARY KEY,
+    paper_id TEXT NOT NULL REFERENCES papers(id) ON DELETE CASCADE,
+    section_id TEXT REFERENCES paper_sections(id) ON DELETE SET NULL,
+    position INTEGER NOT NULL,
+    question_json TEXT NOT NULL,
+    answer_json TEXT,
+    solution TEXT,
+    question_type TEXT NOT NULL,
+    difficulty INTEGER NOT NULL CHECK (difficulty BETWEEN 1 AND 5),
+    locked INTEGER NOT NULL DEFAULT 0,
+    generation_metadata TEXT NOT NULL DEFAULT '{}',
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS paper_questions_position_idx ON paper_questions (paper_id, section_id, position);
+"""
+
+
+def database_path() -> Path:
+    configured = os.getenv("DATABASE_URL", "")
+    if configured.startswith("sqlite:///"):
+        return Path(configured.removeprefix("sqlite:///"))
+    return DEFAULT_DATABASE_PATH
+
+
+def initialize_database(path: Path | None = None) -> Path:
+    target = path or database_path()
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with sqlite3.connect(target) as connection:
+        connection.execute("PRAGMA foreign_keys = ON")
+        connection.executescript(SQLITE_SCHEMA)
+        # SQLite cannot add a CHECK constraint to an existing table without a
+        # rebuild.  This small, backwards-compatible migration adds the
+        # persisted pause/cancel control to databases created before jobs were
+        # controllable.
+        job_columns = {row[1] for row in connection.execute("PRAGMA table_info(paper_generation_jobs)")}
+        if "control_state" not in job_columns:
+            connection.execute(
+                "ALTER TABLE paper_generation_jobs ADD COLUMN control_state TEXT NOT NULL DEFAULT 'active'"
+            )
+    return target
+
+
+@contextmanager
+def get_connection(path: Path | None = None) -> Iterator[sqlite3.Connection]:
+    target = initialize_database(path)
+    connection = sqlite3.connect(target)
+    connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
+    try:
+        yield connection
+        connection.commit()
+    finally:
+        connection.close()
+
+
+def decode_question_row(row: sqlite3.Row) -> dict:
+    result = dict(row)
+    for column in ("secondary_concepts", "question_json", "answer_json"):
+        if result[column] is not None:
+            result[column] = json.loads(result[column])
+    return result

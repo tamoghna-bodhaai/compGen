@@ -1,0 +1,156 @@
+from __future__ import annotations
+
+import asyncio
+import copy
+import json
+from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from app.core.settings import Settings
+
+OPENROUTER_CHAT_URL = "https://openrouter.ai/api/v1/chat/completions"
+
+
+def strict_json_schema(schema: dict[str, Any]) -> dict[str, Any]:
+    """Make Pydantic's JSON Schema valid for strict OpenAI-compatible output.
+
+    OpenRouter may route a request to providers that enforce the OpenAI strict
+    schema subset. In that subset each object must reject unknown fields and
+    every declared property must be in ``required``—including fields that are
+    optional in the application model. Nullable fields still use their existing
+    ``anyOf`` shape, so callers can return ``null`` where appropriate.
+    """
+    normalized = copy.deepcopy(schema)
+
+    def normalize(value: Any) -> None:
+        if isinstance(value, dict):
+            properties = value.get("properties")
+            if isinstance(properties, dict):
+                value["required"] = list(properties)
+                value["additionalProperties"] = False
+            for child in value.values():
+                normalize(child)
+        elif isinstance(value, list):
+            for child in value:
+                normalize(child)
+
+    normalize(normalized)
+    return normalized
+
+
+class ModelConfigurationError(RuntimeError):
+    """Raised when a generation operation is attempted without model settings."""
+
+
+class OpenRouterError(RuntimeError):
+    """Raised when OpenRouter rejects or cannot complete a request."""
+
+
+def repair_decoded_latex_escapes(value: Any) -> Any:
+    r"""Repair unescaped LaTeX commands that JSON has decoded as controls.
+
+    A model can incorrectly emit ``\\frac`` as ``\frac`` in its JSON text.
+    JSON then decodes ``\f`` as a form-feed before schema validation. These
+    replacements are intentionally limited to recognizable LaTeX command
+    suffixes, leaving legitimate whitespace untouched.
+    """
+    if isinstance(value, str):
+        return _repair_latex_controls(value)
+    if isinstance(value, list):
+        return [repair_decoded_latex_escapes(item) for item in value]
+    if isinstance(value, dict):
+        return {key: repair_decoded_latex_escapes(item) for key, item in value.items()}
+    return value
+
+
+def _repair_latex_controls(value: str) -> str:
+    return (
+        value.replace("\f" + "rac", "\\frac")
+        .replace("\t" + "an", "\\tan")
+        .replace("\t" + "ext", "\\text")
+        .replace("\b" + "egin", "\\begin")
+        .replace("\b" + "ox", "\\box")
+        .replace("\r" + "ight", "\\right")
+        .replace("\a" + "sqrt", "\\sqrt")
+    )
+
+
+class OpenRouterClient:
+    def __init__(self, settings: Settings) -> None:
+        self.settings = settings
+
+    async def call_llm(
+        self,
+        *,
+        model: str | None,
+        system_prompt: str,
+        user_prompt: str,
+        response_schema: dict[str, Any],
+        temperature: float = 0.4,
+        max_tokens: int = 2400,
+        images: list[str] | None = None,
+    ) -> dict[str, Any]:
+        if not self.settings.openrouter_api_key or not model:
+            raise ModelConfigurationError(
+                "OpenRouter is not configured. Set OPENROUTER_API_KEY and an OpenRouter model for this operation."
+            )
+        if images:
+            user_content: Any = [{"type": "text", "text": user_prompt}]
+            for b64 in images:
+                # Expect raw base64 PNG without data URL prefix
+                url = b64 if b64.startswith("data:") else f"data:image/png;base64,{b64}"
+                user_content.append({"type": "image_url", "image_url": {"url": url}})
+        else:
+            user_content = user_prompt
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            "temperature": temperature,
+            "max_tokens": max_tokens,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {
+                    "name": "question_generator_response",
+                    "strict": True,
+                    "schema": strict_json_schema(response_schema),
+                },
+            },
+        }
+        response = await asyncio.to_thread(self._post, payload)
+        try:
+            content = response["choices"][0]["message"]["content"]
+        except (KeyError, IndexError, TypeError) as error:
+            raise OpenRouterError("OpenRouter response did not include a message.") from error
+        if isinstance(content, list):
+            content = "".join(part.get("text", "") for part in content if isinstance(part, dict))
+        if not isinstance(content, str):
+            raise OpenRouterError("OpenRouter returned a non-text structured response.")
+        try:
+            return repair_decoded_latex_escapes(json.loads(content.removeprefix("```json").removesuffix("```").strip()))
+        except json.JSONDecodeError as error:
+            raise OpenRouterError("OpenRouter did not return valid JSON.") from error
+
+    def _post(self, payload: dict[str, Any]) -> dict[str, Any]:
+        request = Request(
+            OPENROUTER_CHAT_URL,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={
+                "Authorization": f"Bearer {self.settings.openrouter_api_key}",
+                "Content-Type": "application/json",
+                "HTTP-Referer": "http://localhost:3000",
+                "X-Title": "AI Question Variation Paper Generator",
+            },
+            method="POST",
+        )
+        try:
+            with urlopen(request, timeout=60) as response:  # noqa: S310 - fixed OpenRouter endpoint
+                return json.loads(response.read().decode("utf-8"))
+        except HTTPError as error:
+            details = error.read().decode("utf-8", errors="replace")
+            raise OpenRouterError(f"OpenRouter returned HTTP {error.code}: {details}") from error
+        except URLError as error:
+            raise OpenRouterError("Could not reach OpenRouter.") from error

@@ -1,0 +1,702 @@
+from __future__ import annotations
+
+import asyncio
+import json
+import uuid
+from datetime import UTC, datetime
+from typing import Any, ClassVar
+
+from app.db.database import get_connection
+from app.schemas.generation import GeneratedSlotResult, GenerationRequest, GenerationSlot
+from app.schemas.papers import AddManualQuestionRequest, PaperCreateRequest, PaperQuestionInput, PaperUpdateRequest, QuestionEditRequest
+from app.services.generation import GenerationService
+
+
+class PaperNotFoundError(RuntimeError):
+    pass
+
+
+class PaperConflictError(RuntimeError):
+    pass
+
+
+class GenerationCancelled(RuntimeError):
+    """Internal signal used to stop queued work while retaining partial output."""
+
+    pass
+
+
+def _now() -> str:
+    return datetime.now(UTC).isoformat()
+
+
+def _decode(row: Any) -> dict:
+    item = dict(row)
+    for key in ("generation_config", "branding_config", "question_json", "answer_json", "generation_metadata"):
+        if key in item and item[key] is not None:
+            item[key] = json.loads(item[key])
+    if "locked" in item:
+        item["locked"] = bool(item["locked"])
+    return item
+
+
+class PaperService:
+    # Jobs run in this FastAPI process. Keeping the task references lets a
+    # cancel request interrupt an in-flight model call instead of merely
+    # preventing the next queued slot from starting.
+    _active_generation_tasks: ClassVar[dict[str, asyncio.Task[Any]]] = {}
+
+    @staticmethod
+    def recover_interrupted_generation_jobs() -> None:
+        """Make jobs from a previous server process safe to continue.
+
+        Background tasks are in-process, so a server restart cannot resume an
+        old worker. Marking it cancelled is truthful and keeps completed
+        questions/solutions available for a fresh continuation job.
+        """
+        now = _now()
+        with get_connection() as connection:
+            jobs = connection.execute(
+                "SELECT id, paper_id, operation FROM paper_generation_jobs "
+                "WHERE state IN ('queued', 'running') "
+                "OR (state = 'failed' AND control_state = 'cancelled' "
+                "AND message LIKE 'Generation stopped because the backend restarted%')"
+            ).fetchall()
+            for job in jobs:
+                if job["operation"] == "initial":
+                    completed = connection.execute(
+                        "SELECT COUNT(*) FROM paper_questions WHERE paper_id = ? "
+                        "AND generation_metadata LIKE '%\"generation_slot\"%'",
+                        (job["paper_id"],),
+                    ).fetchone()[0]
+                else:
+                    completed = connection.execute(
+                        "SELECT COUNT(*) FROM paper_questions WHERE paper_id = ? "
+                        "AND generation_metadata LIKE '%\"solution_origin\": \"generated\"%'",
+                        (job["paper_id"],),
+                    ).fetchone()[0]
+                connection.execute(
+                    "UPDATE paper_generation_jobs SET state = 'failed', control_state = 'cancelled', completed_questions = ?, "
+                    "message = 'Generation stopped because the backend restarted. Partial work is retained.', "
+                    "error_message = '', finished_at = ?, updated_at = ? WHERE id = ?",
+                    (completed, now, now, job["id"]),
+                )
+
+    def create(self, request: PaperCreateRequest) -> dict:
+        paper_id = str(uuid.uuid4())
+        now = _now()
+        with get_connection() as connection:
+            connection.execute(
+                "INSERT INTO papers (id, title, exam, subject, generation_config, branding_config, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (paper_id, request.title, request.exam, request.subject, request.model_dump_json(), "{}", "draft", now, now),
+            )
+        if request.subtopic_plans:
+            self._ensure_plan_sections(paper_id, request)
+        return self.get(paper_id)
+
+    def list(self) -> list[dict]:
+        with get_connection() as connection:
+            rows = connection.execute("SELECT * FROM papers ORDER BY updated_at DESC").fetchall()
+            return [self._summary(_decode(row), connection) for row in rows]
+
+    def get(self, paper_id: str) -> dict:
+        with get_connection() as connection:
+            row = connection.execute("SELECT * FROM papers WHERE id = ?", (paper_id,)).fetchone()
+            if row is None:
+                raise PaperNotFoundError("Paper not found")
+            paper = _decode(row)
+            sections = [_decode(section) for section in connection.execute(
+                "SELECT * FROM paper_sections WHERE paper_id = ? ORDER BY position", (paper_id,)
+            ).fetchall()]
+            questions = [_decode(question) for question in connection.execute(
+                "SELECT paper_questions.* FROM paper_questions LEFT JOIN paper_sections ON paper_questions.section_id = paper_sections.id WHERE paper_questions.paper_id = ? ORDER BY CASE WHEN paper_questions.section_id IS NULL THEN 1 ELSE 0 END, paper_sections.position, paper_questions.position",
+                (paper_id,),
+            ).fetchall()]
+        paper["sections"] = sections
+        paper["questions"] = questions
+        paper["question_count"] = len(questions)
+        paper["requested_question_count"] = self._requested_total(paper["generation_config"])
+        paper["generation_job"] = self._latest_generation_job(paper_id)
+        return paper
+
+    def update(self, paper_id: str, request: PaperUpdateRequest) -> dict:
+        updates = request.model_dump(exclude_none=True)
+        if not updates:
+            return self.get(paper_id)
+        now = _now()
+        if "branding_config" in updates:
+            updates["branding_config"] = json.dumps(updates["branding_config"])
+        if "title" in updates:
+            # Keep the generation request's title in sync for logs and later generation calls.
+            paper = self.get(paper_id)
+            config = paper["generation_config"]
+            config["title"] = updates["title"]
+            updates["generation_config"] = json.dumps(config)
+        updates["updated_at"] = now
+        with get_connection() as connection:
+            assignments = ", ".join(f"{key} = ?" for key in updates)
+            cursor = connection.execute(f"UPDATE papers SET {assignments} WHERE id = ?", [*updates.values(), paper_id])
+            if cursor.rowcount != 1:
+                raise PaperNotFoundError("Paper not found")
+        return self.get(paper_id)
+
+    def delete(self, paper_id: str) -> None:
+        with get_connection() as connection:
+            cursor = connection.execute("DELETE FROM papers WHERE id = ?", (paper_id,))
+            if cursor.rowcount != 1:
+                raise PaperNotFoundError("Paper not found")
+
+    def add_section(self, paper_id: str, title: str) -> dict:
+        self._ensure_paper(paper_id)
+        section_id, now = str(uuid.uuid4()), _now()
+        with get_connection() as connection:
+            position = connection.execute(
+                "SELECT COALESCE(MAX(position), 0) + 1 FROM paper_sections WHERE paper_id = ?", (paper_id,)
+            ).fetchone()[0]
+            connection.execute(
+                "INSERT INTO paper_sections (id, paper_id, title, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (section_id, paper_id, title, position, now, now),
+            )
+        return self.get(paper_id)
+
+    def update_section(self, paper_id: str, section_id: str, *, title: str | None, position: int | None) -> dict:
+        self._ensure_section(paper_id, section_id)
+        if position is not None:
+            self._move_section(paper_id, section_id, position)
+        if title is not None:
+            with get_connection() as connection:
+                connection.execute("UPDATE paper_sections SET title = ?, updated_at = ? WHERE id = ?", (title, _now(), section_id))
+        return self.get(paper_id)
+
+    def delete_section(self, paper_id: str, section_id: str) -> dict:
+        self._ensure_section(paper_id, section_id)
+        with get_connection() as connection:
+            connection.execute("UPDATE paper_questions SET section_id = NULL WHERE paper_id = ? AND section_id = ?", (paper_id, section_id))
+            connection.execute("DELETE FROM paper_sections WHERE id = ?", (section_id,))
+        return self.get(paper_id)
+
+    def add_manual_question(self, paper_id: str, request: AddManualQuestionRequest) -> dict:
+        self._ensure_paper(paper_id)
+        if request.section_id:
+            self._ensure_section(paper_id, request.section_id)
+        question_id, now = str(uuid.uuid4()), _now()
+        with get_connection() as connection:
+            position = self._next_question_position(connection, paper_id, request.section_id)
+            connection.execute(
+                "INSERT INTO paper_questions (id, paper_id, section_id, position, question_json, answer_json, solution, question_type, difficulty, locked, generation_metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+                (
+                    question_id, paper_id, request.section_id, position, json.dumps(request.question_json()),
+                    json.dumps({"correct_answer": request.correct_answer}) if request.correct_answer else None,
+                    request.solution, request.question_type.value, request.difficulty,
+                    json.dumps({"origin": "manual"}), now, now,
+                ),
+            )
+        return self.get(paper_id)
+
+    def edit_question(self, paper_id: str, question_id: str, request: QuestionEditRequest) -> dict:
+        current = self._ensure_question(paper_id, question_id)
+        # Pydantic represents both an omitted field and an explicit JSON null as
+        # None. The latter means "move this question back to unsectioned".
+        section_requested = "section_id" in request.model_fields_set
+        if section_requested and request.section_id is not None:
+            self._ensure_section(paper_id, request.section_id)
+        question_json = current["question_json"]
+        for key in ("stem", "options", "marks"):
+            value = getattr(request, key)
+            if value is not None:
+                question_json[key] = value
+        if current["question_type"] == "single_correct_mcq" and len(question_json.get("options", [])) != 4:
+            raise PaperConflictError("Single-correct MCQs must retain exactly four options.")
+        updates: dict[str, Any] = {"question_json": json.dumps(question_json), "updated_at": _now()}
+        if request.correct_answer is not None:
+            updates["answer_json"] = json.dumps({"correct_answer": request.correct_answer})
+        if request.solution is not None:
+            updates["solution"] = request.solution
+        if request.difficulty is not None:
+            updates["difficulty"] = request.difficulty
+        if section_requested and request.position is None and request.section_id != current["section_id"]:
+            with get_connection() as connection:
+                destination = self._next_question_position(connection, paper_id, request.section_id)
+            self._move_question(paper_id, question_id, request.section_id, destination)
+        if section_requested:
+            updates["section_id"] = request.section_id
+        if request.position is not None:
+            destination_section = request.section_id if section_requested else current["section_id"]
+            self._move_question(paper_id, question_id, destination_section, request.position)
+        with get_connection() as connection:
+            assignments = ", ".join(f"{key} = ?" for key in updates)
+            connection.execute(f"UPDATE paper_questions SET {assignments} WHERE id = ?", [*updates.values(), question_id])
+        return self.get(paper_id)
+
+    def set_lock(self, paper_id: str, question_id: str, locked: bool) -> dict:
+        self._ensure_question(paper_id, question_id)
+        with get_connection() as connection:
+            connection.execute("UPDATE paper_questions SET locked = ?, updated_at = ? WHERE id = ?", (int(locked), _now(), question_id))
+        return self.get(paper_id)
+
+    def delete_question(self, paper_id: str, question_id: str) -> dict:
+        self._ensure_question(paper_id, question_id)
+        with get_connection() as connection:
+            connection.execute("DELETE FROM paper_questions WHERE id = ?", (question_id,))
+        return self.get(paper_id)
+
+    async def generate_initial(self, paper_id: str, generation_service: GenerationService | None = None) -> dict:
+        paper = self.get(paper_id)
+        if paper["questions"]:
+            raise PaperConflictError("This paper already has questions. Use selected or unlocked regeneration instead.")
+        request = GenerationRequest.model_validate(paper["generation_config"])
+        section_ids = self._ensure_plan_sections(paper_id, request)
+        generated = await (generation_service or GenerationService()).generate(request)
+        for result in generated.slots:
+            self._store_generated_result(paper_id, result, section_id=section_ids.get(result.slot.section_title or ""))
+        self.update(paper_id, PaperUpdateRequest(status="generated"))
+        return self.get(paper_id)
+
+    def queue_initial_generation(self, paper_id: str) -> dict:
+        paper = self.get(paper_id)
+        current_job = paper.get("generation_job")
+        if current_job and current_job["state"] in {"queued", "running"}:
+            raise PaperConflictError("This paper already has a generation job in progress.")
+        request = GenerationRequest.model_validate(paper["generation_config"])
+        slots = request.build_slots()
+        completed_slots = self._completed_initial_slots(paper) & {slot.slot for slot in slots}
+        if paper["questions"] and len(completed_slots) != len(paper["questions"]):
+            raise PaperConflictError("This paper contains manually curated questions. Use selected or unlocked regeneration instead.")
+        missing_slots = [slot for slot in slots if slot.slot not in completed_slots]
+        if not missing_slots:
+            raise PaperConflictError("All requested questions have already been generated.")
+        job_id, now = str(uuid.uuid4()), _now()
+        try:
+            with get_connection() as connection:
+                connection.execute(
+                    "INSERT INTO paper_generation_jobs (id, paper_id, operation, state, total_questions, completed_questions, message, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (job_id, paper_id, "initial", "queued", len(slots), len(completed_slots), "Queued for generation", now, now),
+                )
+                connection.execute("UPDATE papers SET updated_at = ? WHERE id = ?", (now, paper_id))
+        except Exception as error:
+            if "UNIQUE constraint failed" in str(error):
+                raise PaperConflictError("This paper already has a generation job in progress.") from error
+            raise
+        return self._generation_job(job_id)
+
+    async def run_initial_generation_job(self, paper_id: str, job_id: str) -> None:
+        self._register_job_task(job_id)
+        try:
+            await self._wait_until_job_can_continue(job_id)
+            self._update_generation_job(job_id, state="running", message="Generating and independently validating questions", started=True)
+            paper = self.get(paper_id)
+            request = GenerationRequest.model_validate(paper["generation_config"])
+            all_slots = request.build_slots()
+            completed_slots = self._completed_initial_slots(paper) & {slot.slot for slot in all_slots}
+            if paper["questions"] and len(completed_slots) != len(paper["questions"]):
+                raise PaperConflictError("This paper contains manually curated questions. Use selected or unlocked regeneration instead.")
+            missing_slots = [slot for slot in all_slots if slot.slot not in completed_slots]
+            section_ids = self._ensure_plan_sections(paper_id, request)
+
+            async def report_progress(result: GeneratedSlotResult) -> None:
+                await self._wait_until_job_can_continue(job_id)
+                # Persist each completed slot immediately. The editor can then
+                # show a useful partial paper while the remaining slots run.
+                # Sectioned plans keep each subtopic's questions grouped under
+                # its own heading; position stays global so ordering is stable.
+                self._store_generated_result(
+                    paper_id, result, section_id=section_ids.get(result.slot.section_title or ""), position=result.slot.slot,
+                )
+                job = self._generation_job(job_id)
+                completed = min(job["completed_questions"] + 1, job["total_questions"])
+                self._update_generation_job(
+                    job_id,
+                    completed_questions=completed,
+                    message=f"Validated {completed} of {job['total_questions']} questions",
+                )
+
+            await GenerationService().generate(
+                request,
+                on_slot_complete=report_progress,
+                slots=missing_slots,
+                before_slot=lambda _: self._wait_until_job_can_continue(job_id),
+            )
+            self.update(paper_id, PaperUpdateRequest(status="generated"))
+            self._update_generation_job(
+                job_id,
+                state="succeeded",
+                completed_questions=len(all_slots),
+                message=f"Generated and validated {len(all_slots)} questions",
+                finished=True,
+            )
+        except asyncio.CancelledError:
+            if self._generation_job(job_id).get("control_state") != "cancelled":
+                self._update_generation_job(job_id, state="failed", message="Generation interrupted", error_message="Generation was interrupted.", finished=True)
+            return
+        except GenerationCancelled:
+            return
+        except Exception as error:
+            self._update_generation_job(job_id, state="failed", message="Generation needs attention", error_message=str(error), finished=True)
+        finally:
+            self._unregister_job_task(job_id)
+
+    def queue_solution_generation(self, paper_id: str) -> dict:
+        paper = self.get(paper_id)
+        missing_solutions = [question for question in paper["questions"] if not question.get("solution")]
+        if not missing_solutions:
+            raise PaperConflictError("Every question already has a solution.")
+        current_job = paper.get("generation_job")
+        if current_job and current_job["state"] in {"queued", "running"}:
+            raise PaperConflictError("This paper already has a generation job in progress.")
+        job_id, now = str(uuid.uuid4()), _now()
+        try:
+            with get_connection() as connection:
+                connection.execute(
+                    "INSERT INTO paper_generation_jobs (id, paper_id, operation, state, total_questions, completed_questions, message, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (job_id, paper_id, "solutions", "queued", len(missing_solutions), 0, "Queued to generate missing solutions", now, now),
+                )
+                connection.execute("UPDATE papers SET updated_at = ? WHERE id = ?", (now, paper_id))
+        except Exception as error:
+            if "UNIQUE constraint failed" in str(error):
+                raise PaperConflictError("This paper already has a generation job in progress.") from error
+            raise
+        return self._generation_job(job_id)
+
+    async def run_solution_generation_job(self, paper_id: str, job_id: str) -> None:
+        self._register_job_task(job_id)
+        try:
+            await self._wait_until_job_can_continue(job_id)
+            self._update_generation_job(job_id, state="running", message="Generating worked solutions", started=True)
+            paper = self.get(paper_id)
+            questions = [question for question in paper["questions"] if not question.get("solution")]
+            if not questions:
+                raise PaperConflictError("Every question already has a solution.")
+            service = GenerationService()
+            semaphore = asyncio.Semaphore(service.settings.max_concurrent_generations)
+
+            async def solve(question: dict) -> tuple[dict, Any]:
+                await self._wait_until_job_can_continue(job_id)
+                async with semaphore:
+                    await self._wait_until_job_can_continue(job_id)
+                    result = await service.generate_solution(
+                        question["question_json"], exam=paper["exam"], subject=paper["subject"]
+                    )
+                    return question, result
+
+            tasks = [asyncio.create_task(solve(question)) for question in questions]
+            try:
+                for task in asyncio.as_completed(tasks):
+                    question, result = await task
+                    self._store_solution_result(question, result)
+                    job = self._generation_job(job_id)
+                    completed = min(job["completed_questions"] + 1, job["total_questions"])
+                    self._update_generation_job(
+                        job_id,
+                        completed_questions=completed,
+                        message=f"Generated {completed} of {job['total_questions']} solutions",
+                    )
+            except BaseException:
+                for task in tasks:
+                    task.cancel()
+                await asyncio.gather(*tasks, return_exceptions=True)
+                raise
+
+            completed = self._generation_job(job_id)["completed_questions"]
+            self._update_generation_job(
+                job_id,
+                state="succeeded",
+                completed_questions=completed,
+                message=f"Generated {completed} worked solutions",
+                finished=True,
+            )
+        except asyncio.CancelledError:
+            if self._generation_job(job_id).get("control_state") != "cancelled":
+                self._update_generation_job(job_id, state="failed", message="Solution generation interrupted", error_message="Solution generation was interrupted.", finished=True)
+            return
+        except GenerationCancelled:
+            return
+        except Exception as error:
+            self._update_generation_job(job_id, state="failed", message="Solution generation needs attention", error_message=str(error), finished=True)
+        finally:
+            self._unregister_job_task(job_id)
+
+    def pause_generation(self, paper_id: str) -> dict:
+        job = self._active_job_for_control(paper_id)
+        if job.get("control_state") == "paused":
+            return job
+        self._update_generation_job(
+            job["id"], control_state="paused",
+            message=f"Paused at {job['completed_questions']} of {job['total_questions']}. Completed work is available in the editor.",
+        )
+        return self._generation_job(job["id"])
+
+    def resume_generation(self, paper_id: str) -> dict:
+        job = self._active_job_for_control(paper_id)
+        if job.get("control_state") != "paused":
+            raise PaperConflictError("This generation job is not paused.")
+        self._update_generation_job(job["id"], control_state="active", message="Resuming generation")
+        return self._generation_job(job["id"])
+
+    def cancel_generation(self, paper_id: str) -> dict:
+        job = self._active_job_for_control(paper_id)
+        self._update_generation_job(
+            job["id"], state="failed", control_state="cancelled",
+            message=f"Generation cancelled after {job['completed_questions']} of {job['total_questions']}. Partial work is retained.",
+            error_message="", finished=True,
+        )
+        task = self._active_generation_tasks.get(job["id"])
+        if task and not task.done():
+            task.cancel()
+        return self._generation_job(job["id"])
+
+    @staticmethod
+    def _completed_initial_slots(paper: dict) -> set[int]:
+        slots = set()
+        for question in paper["questions"]:
+            slot = (question.get("generation_metadata") or {}).get("generation_slot")
+            if isinstance(slot, int):
+                slots.add(slot)
+        return slots
+
+    def _active_job_for_control(self, paper_id: str) -> dict:
+        self._ensure_paper(paper_id)
+        job = self._latest_generation_job(paper_id)
+        if not job or job["state"] not in {"queued", "running"}:
+            raise PaperConflictError("There is no active generation job for this paper.")
+        return job
+
+    def _register_job_task(self, job_id: str) -> None:
+        task = asyncio.current_task()
+        if task is not None:
+            self._active_generation_tasks[job_id] = task
+
+    def _unregister_job_task(self, job_id: str) -> None:
+        current = asyncio.current_task()
+        if self._active_generation_tasks.get(job_id) is current:
+            self._active_generation_tasks.pop(job_id, None)
+
+    async def _wait_until_job_can_continue(self, job_id: str) -> None:
+        while True:
+            job = self._generation_job(job_id)
+            if job.get("control_state") == "cancelled":
+                raise GenerationCancelled("Generation was cancelled.")
+            if job.get("control_state") != "paused":
+                return
+            await asyncio.sleep(0.2)
+
+    def _generation_job(self, job_id: str) -> dict:
+        with get_connection() as connection:
+            row = connection.execute("SELECT * FROM paper_generation_jobs WHERE id = ?", (job_id,)).fetchone()
+        if row is None:
+            raise PaperNotFoundError("Generation job not found")
+        return _decode(row)
+
+    def _latest_generation_job(self, paper_id: str) -> dict | None:
+        with get_connection() as connection:
+            row = connection.execute(
+                "SELECT * FROM paper_generation_jobs WHERE paper_id = ? ORDER BY created_at DESC LIMIT 1", (paper_id,)
+            ).fetchone()
+        return _decode(row) if row else None
+
+    def _update_generation_job(
+        self,
+        job_id: str,
+        *,
+        state: str | None = None,
+        completed_questions: int | None = None,
+        message: str | None = None,
+        error_message: str | None = None,
+        control_state: str | None = None,
+        started: bool = False,
+        finished: bool = False,
+    ) -> None:
+        now = _now()
+        updates: dict[str, Any] = {"updated_at": now}
+        if state is not None:
+            updates["state"] = state
+        if completed_questions is not None:
+            updates["completed_questions"] = completed_questions
+        if message is not None:
+            updates["message"] = message
+        if error_message is not None:
+            updates["error_message"] = error_message
+        if control_state is not None:
+            updates["control_state"] = control_state
+        if started:
+            updates["started_at"] = now
+        if finished:
+            updates["finished_at"] = now
+        with get_connection() as connection:
+            assignments = ", ".join(f"{key} = ?" for key in updates)
+            row = connection.execute("SELECT paper_id FROM paper_generation_jobs WHERE id = ?", (job_id,)).fetchone()
+            if row is None:
+                raise PaperNotFoundError("Generation job not found")
+            connection.execute(f"UPDATE paper_generation_jobs SET {assignments} WHERE id = ?", [*updates.values(), job_id])
+            connection.execute("UPDATE papers SET updated_at = ? WHERE id = ?", (now, row["paper_id"]))
+
+    async def regenerate_questions(self, paper_id: str, question_ids: list[str], generation_service: GenerationService | None = None,
+                                   custom_instruction: str | None = None) -> dict:
+        paper = self.get(paper_id)
+        current_by_id = {question["id"]: question for question in paper["questions"]}
+        missing = set(question_ids) - set(current_by_id)
+        if missing:
+            raise PaperNotFoundError("One or more selected questions were not found in this paper.")
+        locked = [question_id for question_id in question_ids if current_by_id[question_id]["locked"]]
+        if locked:
+            raise PaperConflictError("Locked questions cannot be regenerated. Unlock them first.")
+        request = GenerationRequest.model_validate(paper["generation_config"])
+        service = generation_service or GenerationService()
+        for question_id in question_ids:
+            current = current_by_id[question_id]
+            result = await service.generate_slot(
+                request,
+                GenerationSlot(slot=current["position"], question_type=current["question_type"], difficulty=current["difficulty"]),
+                custom_instruction=(custom_instruction or "").strip() or None,
+            )
+            self._store_generated_result(paper_id, result, replace_question_id=question_id, section_id=current["section_id"], position=current["position"])
+        return self.get(paper_id)
+
+    async def regenerate_unlocked(self, paper_id: str, generation_service: GenerationService | None = None) -> dict:
+        paper = self.get(paper_id)
+        question_ids = [question["id"] for question in paper["questions"] if not question["locked"]]
+        if not question_ids:
+            raise PaperConflictError("There are no unlocked questions to regenerate.")
+        return await self.regenerate_questions(paper_id, question_ids, generation_service)
+
+    @staticmethod
+    def _requested_total(config: dict) -> int:
+        plans = config.get("subtopic_plans")
+        if plans:
+            return sum(sum(item.get("count", 0) for item in plan.get("question_types", [])) for plan in plans)
+        return sum(item.get("count", 0) for item in config.get("question_types", []))
+
+    def _ensure_plan_sections(self, paper_id: str, request: GenerationRequest) -> dict[str, str]:
+        """Create one section per subtopic plan and return title -> section id."""
+        if not request.subtopic_plans:
+            return {}
+        self._ensure_paper(paper_id)
+        with get_connection() as connection:
+            existing = {
+                row["title"]: row["id"]
+                for row in connection.execute("SELECT id, title FROM paper_sections WHERE paper_id = ?", (paper_id,)).fetchall()
+            }
+            position = connection.execute(
+                "SELECT COALESCE(MAX(position), 0) FROM paper_sections WHERE paper_id = ?", (paper_id,)
+            ).fetchone()[0] or 0
+            mapping = dict(existing)
+            for plan in request.subtopic_plans:
+                title = plan.resolved_section_title()
+                if title in mapping:
+                    continue
+                section_id, now = str(uuid.uuid4()), _now()
+                position += 1
+                connection.execute(
+                    "INSERT INTO paper_sections (id, paper_id, title, position, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)",
+                    (section_id, paper_id, title, position, now, now),
+                )
+                mapping[title] = section_id
+        return mapping
+
+    def _store_generated_result(
+        self,
+        paper_id: str,
+        result: GeneratedSlotResult,
+        *,
+        replace_question_id: str | None = None,
+        section_id: str | None = None,
+        position: int | None = None,
+    ) -> None:
+        now = _now()
+        question = result.question
+        question_json = {
+            "stem": question.stem,
+            "options": question.options,
+            "primary_concept": question.primary_concept,
+            "secondary_concepts": question.secondary_concepts,
+            "estimated_time_minutes": question.estimated_time_minutes,
+            "marks": question.marks,
+        }
+        answer_json = {"correct_answer": question.correct_answer}
+        metadata = {
+            "origin": "generated",
+            "generation_slot": result.slot.slot,
+            "seed_question_ids": result.seed_question_ids,
+            "similarity_score": result.similarity_score,
+            "generation_attempt": result.generation_attempt,
+            "validation": result.validation.model_dump(),
+        }
+        with get_connection() as connection:
+            if replace_question_id:
+                connection.execute(
+                    "UPDATE paper_questions SET question_json = ?, answer_json = ?, solution = ?, question_type = ?, difficulty = ?, generation_metadata = ?, updated_at = ? WHERE id = ?",
+                    (json.dumps(question_json), json.dumps(answer_json), question.solution, question.question_type.value,
+                     question.difficulty, json.dumps(metadata), now, replace_question_id),
+                )
+                return
+            stored_position = position or self._next_question_position(connection, paper_id, section_id)
+            connection.execute(
+                "INSERT INTO paper_questions (id, paper_id, section_id, position, question_json, answer_json, solution, question_type, difficulty, locked, generation_metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+                (str(uuid.uuid4()), paper_id, section_id, stored_position, json.dumps(question_json), json.dumps(answer_json),
+                 question.solution, question.question_type.value, question.difficulty, json.dumps(metadata), now, now),
+            )
+
+    @staticmethod
+    def _store_solution_result(question: dict, result: Any) -> None:
+        answer = question.get("answer_json") or {}
+        if result.correct_answer:
+            answer = {"correct_answer": result.correct_answer}
+        metadata = question.get("generation_metadata") or {}
+        metadata["solution_origin"] = "generated"
+        with get_connection() as connection:
+            connection.execute(
+                "UPDATE paper_questions SET answer_json = ?, solution = ?, generation_metadata = ?, updated_at = ? WHERE id = ?",
+                (json.dumps(answer) if answer else None, result.solution, json.dumps(metadata), _now(), question["id"]),
+            )
+
+    def _ensure_paper(self, paper_id: str) -> None:
+        with get_connection() as connection:
+            if connection.execute("SELECT 1 FROM papers WHERE id = ?", (paper_id,)).fetchone() is None:
+                raise PaperNotFoundError("Paper not found")
+
+    def _ensure_section(self, paper_id: str, section_id: str) -> None:
+        with get_connection() as connection:
+            if connection.execute("SELECT 1 FROM paper_sections WHERE id = ? AND paper_id = ?", (section_id, paper_id)).fetchone() is None:
+                raise PaperNotFoundError("Section not found")
+
+    def _ensure_question(self, paper_id: str, question_id: str) -> dict:
+        with get_connection() as connection:
+            row = connection.execute("SELECT * FROM paper_questions WHERE id = ? AND paper_id = ?", (question_id, paper_id)).fetchone()
+        if row is None:
+            raise PaperNotFoundError("Question not found")
+        return _decode(row)
+
+    @staticmethod
+    def _next_question_position(connection: Any, paper_id: str, section_id: str | None) -> int:
+        return connection.execute(
+            "SELECT COALESCE(MAX(position), 0) + 1 FROM paper_questions WHERE paper_id = ? AND section_id IS ?", (paper_id, section_id)
+        ).fetchone()[0]
+
+    def _move_section(self, paper_id: str, section_id: str, destination: int) -> None:
+        with get_connection() as connection:
+            rows = connection.execute("SELECT id FROM paper_sections WHERE paper_id = ? ORDER BY position", (paper_id,)).fetchall()
+            ids = [row["id"] for row in rows if row["id"] != section_id]
+            ids.insert(min(destination - 1, len(ids)), section_id)
+            for position, current_id in enumerate(ids, start=1):
+                connection.execute("UPDATE paper_sections SET position = ?, updated_at = ? WHERE id = ?", (position, _now(), current_id))
+
+    def _move_question(self, paper_id: str, question_id: str, section_id: str | None, destination: int) -> None:
+        with get_connection() as connection:
+            rows = connection.execute(
+                "SELECT id FROM paper_questions WHERE paper_id = ? AND section_id IS ? ORDER BY position", (paper_id, section_id)
+            ).fetchall()
+            ids = [row["id"] for row in rows if row["id"] != question_id]
+            ids.insert(min(destination - 1, len(ids)), question_id)
+            for position, current_id in enumerate(ids, start=1):
+                connection.execute("UPDATE paper_questions SET position = ?, section_id = ?, updated_at = ? WHERE id = ?", (position, section_id, _now(), current_id))
+
+    @staticmethod
+    def _summary(paper: dict, connection: Any) -> dict:
+        count = connection.execute("SELECT COUNT(*) FROM paper_questions WHERE paper_id = ?", (paper["id"],)).fetchone()[0]
+        job = connection.execute(
+            "SELECT * FROM paper_generation_jobs WHERE paper_id = ? ORDER BY created_at DESC LIMIT 1", (paper["id"],)
+        ).fetchone()
+        return {key: value for key, value in paper.items() if key not in {"generation_config", "branding_config"}} | {
+            "question_count": count,
+            "requested_question_count": PaperService._requested_total(paper["generation_config"]),
+            "generation_job": _decode(job) if job else None,
+        }

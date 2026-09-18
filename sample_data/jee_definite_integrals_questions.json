@@ -1,0 +1,421 @@
+{
+  "schema_version": 1,
+  "collection_id": "thinkc-definite-integrals-2026",
+  "source_document": "Questions (1).pdf",
+  "defaults": {
+    "exam": "JEE",
+    "class_level": "Class 11/12",
+    "subject": "Mathematics",
+    "chapter": "Calculus",
+    "topic": "Definite Integrals",
+    "question_type": "single_correct_mcq",
+    "difficulty": 3,
+    "secondary_concepts": [],
+    "expected_time_minutes": 3,
+    "marks": 3,
+    "source": "User-provided Questions (1).pdf (ThinkC, Test on Definite Integrals)",
+    "verification_status": "transcription_pending"
+  },
+  "questions": [
+    {
+      "source_question_number": 1,
+      "source_page": 1,
+      "primary_concept": "parameter-dependent definite integral",
+      "question_archetype": "inequality_from_integral",
+      "stem": "All values of $a$ for which $\\int_1^2 [a^2 + (4-4a)x + 4x^3]\\,dx \\leq 12$ are given by:",
+      "options": ["$a=3$", "$a\\leq4$", "$0\\leq a<3$", "None of these"]
+    },
+    {
+      "source_question_number": 2,
+      "source_page": 1,
+      "primary_concept": "Riemann sum",
+      "question_archetype": "limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\sum_{r=1}^{n}\\frac{1}{\\sqrt{nr}}$ is equal to:",
+      "options": ["$2$", "$1$", "$0$", "None of these"]
+    },
+    {
+      "source_question_number": 3,
+      "source_page": 1,
+      "primary_concept": "properties of definite integrals",
+      "question_archetype": "integral_identity",
+      "stem": "If $\\int_a^b f(x)\\,dx=\\ell_1$ and $\\int_a^b g(x)\\,dx=\\ell_2$, then:",
+      "options": ["$\\int_a^b(f(x)+g(x))\\,dx=\\ell_1+\\ell_2$", "$\\int_a^b f(x)g(x)\\,dx=\\ell_1\\ell_2$", "$\\int_a^b\\frac{f(x)}{g(x)}\\,dx=\\frac{\\ell_1}{\\ell_2}$", "$\\int_a^b\\frac{dx}{f(x)}=\\frac{\\ell}{\\ell_1}$"]
+    },
+    {
+      "source_question_number": 4,
+      "source_page": 1,
+      "primary_concept": "definite integral using differential equation",
+      "question_archetype": "function_relation_integral",
+      "stem": "Let $f'(x)=f(x)$ with $f(0)=1$, and $f(x)+g(x)=x^2$. The value of $\\int_0^1 f(x)g(x)\\,dx$ is:",
+      "options": ["$\\frac{e-2}{4}$", "$\\frac{e-3}{2}$", "$\\frac{e-4}{2}$", "None of these"]
+    },
+    {
+      "source_question_number": 5,
+      "source_page": 1,
+      "primary_concept": "Riemann sum with trigonometric integrand",
+      "question_archetype": "limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\sum_{r=1}^{n}\\frac{1}{n}\\sin^2\\!\\left(\\frac{r\\pi}{2n}\\right)$ is:",
+      "options": ["$\\frac{\\pi}{2}$", "$2$", "$\\frac{2}{\\pi}$", "None of these"]
+    },
+    {
+      "source_question_number": 6,
+      "source_page": 1,
+      "primary_concept": "Riemann sum",
+      "question_archetype": "limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\frac{1}{n}\\sum_{r=1}^{2n}\\frac{r}{\\sqrt{r^2+n^2}}$ equals:",
+      "options": ["$1+\\sqrt5$", "$\\sqrt5-1$", "$-1+\\sqrt2$", "$1+\\sqrt2$"]
+    },
+    {
+      "source_question_number": 7,
+      "source_page": 1,
+      "primary_concept": "change of variable in definite integral",
+      "question_archetype": "substitution_identity",
+      "stem": "$\\int_{ac}^{bc}f(x)\\,dx$, where $c\\ne0$, is also equal to:",
+      "options": ["$c\\int_a^b f(cx)\\,dx$", "$\\frac1c\\int_a^b f\\!\\left(\\frac{x}{c}\\right)\\,dx$", "$\\frac1c\\int_a^b f(cx)\\,dx$", "$c\\int_a^b f\\!\\left(\\frac{x}{c}\\right)\\,dx$"]
+    },
+    {
+      "source_question_number": 8,
+      "source_page": 1,
+      "primary_concept": "continuity and rational-valued functions",
+      "question_archetype": "constant_function_integral",
+      "stem": "If $f(x)$ is continuous and attains only rational values on $[-3,3]$, and its greatest value there is $5$, then $\\int_{-3}^{3}f(x)\\,dx=$",
+      "options": ["$5$", "$10$", "$20$", "$30$"]
+    },
+    {
+      "source_question_number": 9,
+      "source_page": 1,
+      "primary_concept": "Riemann sum",
+      "question_archetype": "limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\sum_{r=1}^{6n}\\frac{1}{n+r}=$",
+      "options": ["$\\log6$", "$\\log7$", "$\\log5$", "$0$"]
+    },
+    {
+      "source_question_number": 10,
+      "source_page": 2,
+      "primary_concept": "Riemann sum",
+      "question_archetype": "limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\sum_{r=1}^{n}\\frac{1}{n+r}$ is equal to:",
+      "options": ["$\\log_e5$", "$0$", "$\\log_e4$", "None of these"]
+    },
+    {
+      "source_question_number": 11,
+      "source_page": 2,
+      "primary_concept": "Riemann sum",
+      "question_archetype": "limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\left[\\frac{n}{n^2+1^2}+\\frac{n}{n^2+2^2}+\\cdots+\\frac{1}{2n}\\right]=$",
+      "options": ["$\\pi$", "$\\frac{\\pi}{3}$", "$\\frac{\\pi}{4}$", "$\\frac{\\pi}{2}$"]
+    },
+    {
+      "source_question_number": 12,
+      "source_page": 2,
+      "primary_concept": "symmetry of definite integrals",
+      "question_archetype": "integral_identity",
+      "stem": "$\\int_{-a}^{a}f(x)\\,dx$ is equal to:",
+      "options": ["$\\int_{-a}^{a}(f(x)-f(-x))\\,dx$", "$\\int_{-a}^{a}(f(x)+f(-x))\\,dx$", "$\\int_0^a(f(x)-f(-x))\\,dx$", "$\\int_0^a(f(x)+f(-x))\\,dx$"]
+    },
+    {
+      "source_question_number": 13,
+      "source_page": 2,
+      "primary_concept": "Riemann sum",
+      "question_archetype": "limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\sum_{r=1}^{n}\\frac{(2r)^k}{n^{k+1}}$, $k\\ne-1$, is equal to:",
+      "options": ["$\\frac{2^k}{k-1}$", "$\\frac{2^k}{k}$", "$\\frac1{k+1}$", "$\\frac{2^k}{k+1}$"]
+    },
+    {
+      "source_question_number": 14,
+      "source_page": 2,
+      "primary_concept": "Riemann sum",
+      "question_archetype": "limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\sum_{r=1}^{n}\\frac{(r^2n-m)^{1/3}}{rn}=$",
+      "options": ["$\\frac12$", "$\\frac32$", "$\\frac52$", "$0$"]
+    },
+    {
+      "source_question_number": 15,
+      "source_page": 2,
+      "primary_concept": "Riemann sum",
+      "question_archetype": "limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\frac{2^k+4^k+6^k+\\cdots+(2n)^k}{n^{k+1}}$, $k\\ne-1$, is equal to:",
+      "options": ["$2^k$", "$\\frac{2^k}{k+1}$", "$\\frac1{k+1}$", "None of these"]
+    },
+    {
+      "source_question_number": 16,
+      "source_page": 2,
+      "primary_concept": "trigonometric definite integral",
+      "question_archetype": "standard_integral_evaluation",
+      "stem": "$\\int_{-\\pi/4}^{\\pi/4}\\frac{dx}{1+\\cos2x}$ is equal to:",
+      "options": ["$1$", "$2$", "$3$", "None of these"]
+    },
+    {
+      "source_question_number": 17,
+      "source_page": 2,
+      "primary_concept": "limit and integral connection",
+      "question_archetype": "factorial_limit",
+      "stem": "$\\lim_{n\\to\\infty}\\left\\{\\frac{n!}{(kn)^n}\\right\\}^{1/n}$, $k\\ne0$, is equal to:",
+      "options": ["$\\frac{k}{e}$", "$\\frac{e}{k}$", "$\\frac1{ke}$", "None of these"]
+    },
+    {
+      "source_question_number": 18,
+      "source_page": 2,
+      "primary_concept": "symmetry of definite integrals",
+      "question_archetype": "symmetric_interval_evaluation",
+      "stem": "If $f(x)=\\frac{x^9-3x^5+7x^3-x+1}{\\cos^2x}$, then $\\int_{-\\pi/4}^{\\pi/4}f(x)\\,dx$ is equal to:",
+      "options": ["Zero", "$\\frac{\\pi}{2}$", "$2$", "$1$"]
+    },
+    {
+      "source_question_number": 19,
+      "source_page": 3,
+      "primary_concept": "Riemann sum with trigonometric integrand",
+      "question_archetype": "limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\sum_{r=1}^{n}\\frac{\\pi}{n}\\sin\\!\\left(\\frac{\\pi r}{n}\\right)=$",
+      "options": ["$0$", "$1$", "$2$", "$3$"]
+    },
+    {
+      "source_question_number": 20,
+      "source_page": 3,
+      "primary_concept": "properties and symmetry of definite integrals",
+      "question_archetype": "multiple_integral_comparison",
+      "stem": "$I_1=\\int_0^{\\pi/2}\\frac{\\sin x-\\cos x}{1+\\sin x\\cos x}dx$, $I_2=\\int_0^{2\\pi}\\cos^6x\\,dx$, $I_3=\\int_{-\\pi/2}^{\\pi/2}\\sin^3x\\,dx$, $I_4=\\int_0^1\\ln(\\frac1x-1)dx$. Then:",
+      "options": ["$I_2=I_3=I_4=0, I_1\\ne0$", "$I_1=I_2=I_3=0, I_4\\ne0$", "$I_1=I_3=I_4=0, I_2\\ne0$", "None of the above"]
+    },
+    {
+      "source_question_number": 21,
+      "source_page": 3,
+      "primary_concept": "Riemann sum",
+      "question_archetype": "logarithmic_limit_of_sum",
+      "stem": "$\\lim_{n\\to\\infty}\\left[\\frac1{na}+\\frac1{na+1}+\\frac1{na+2}+\\cdots+\\frac1{nb}\\right]=$",
+      "options": ["$\\log\\frac ba$", "$\\log\\frac ab$", "$\\log a$", "$\\log b$"]
+    },
+    {
+      "source_question_number": 22,
+      "source_page": 3,
+      "primary_concept": "trigonometric definite integral",
+      "question_archetype": "standard_integral_evaluation",
+      "stem": "$\\int_{\\pi/4}^{3\\pi/4}\\frac{dx}{1+\\cos x}=$",
+      "options": ["$2$", "$-2$", "$\\frac12$", "$-\\frac12$"]
+    },
+    {
+      "source_question_number": 23,
+      "source_page": 3,
+      "primary_concept": "definite integral using symmetry",
+      "question_archetype": "trigonometric_substitution",
+      "stem": "$\\int_0^{\\pi/(2n)}\\frac{dx}{1+(\\tan nx)^n}$, where $n\\in\\mathbb N$, is equal to:",
+      "options": ["$\\frac{n\\pi}{4}$", "$\\frac{\\pi}{2n}$", "$\\frac{\\pi}{4n}$", "$\\frac{2\\pi}{n}$"]
+    },
+    {
+      "source_question_number": 24,
+      "source_page": 3,
+      "primary_concept": "trigonometric definite integral",
+      "question_archetype": "absolute_value_trig_integral",
+      "stem": "$\\int_0^{\\pi/2}\\sqrt{1-\\sin2x}\\,dx$ is equal to:",
+      "options": ["$2\\sqrt2$", "$2(\\sqrt2+1)$", "$2$", "$2(\\sqrt2-1)$"]
+    },
+    {
+      "source_question_number": 25,
+      "source_page": 3,
+      "primary_concept": "definite integral using symmetry",
+      "question_archetype": "logarithmic_trigonometric_integral",
+      "stem": "$\\int_0^{\\pi/2}\\ln(\\tan x+\\cot x)\\,dx$ is equal to:",
+      "options": ["Zero", "$\\pi\\ln2$", "$\\frac{\\pi\\ln4}{4}$", "$\\frac{3\\pi\\ln2}{4}$"]
+    },
+    {
+      "source_question_number": 26,
+      "source_page": 3,
+      "primary_concept": "integration by substitution",
+      "question_archetype": "differential_form_integral",
+      "stem": "$\\int_{\\pi/4}^{\\pi/2}\\cot x\\,d(\\cos x)$ is equal to:",
+      "options": ["$\\frac{1-\\sqrt2}{\\sqrt2}$", "$\\frac{\\sqrt3+\\sqrt2}{\\sqrt2}$", "$\\frac{\\sqrt3-\\sqrt2}{\\sqrt2}$", "$\\frac{\\sqrt3-1}{2}$"]
+    },
+    {
+      "source_question_number": 27,
+      "source_page": 3,
+      "primary_concept": "periodic functions in definite integrals",
+      "question_archetype": "long_interval_trigonometric_integral",
+      "stem": "$\\int_0^{200\\pi}\\sqrt{\\frac{1-\\cos2x}{2}}\\,dx$ is equal to:",
+      "options": ["$100$", "$200$", "$400$", "None of these"]
+    },
+    {
+      "source_question_number": 28,
+      "source_page": 4,
+      "primary_concept": "trigonometric substitution",
+      "question_archetype": "standard_integral_evaluation",
+      "stem": "$\\int_0^{\\pi/6}\\frac{dx}{1+\\cot^3 3x}$ is equal to:",
+      "options": ["$\\frac{\\pi}{12}$", "$\\frac{\\pi}{2}$", "$\\frac{\\pi}{6}$", "$\\frac{\\pi}{3}$"]
+    },
+    {
+      "source_question_number": 29,
+      "source_page": 4,
+      "primary_concept": "functional equation and definite integral",
+      "question_archetype": "reciprocal_functional_equation",
+      "stem": "If $af(x)+bf(1/x)=1/x^2-5$, $x\\ne0$, and $a\\ne b$, then $\\int_1^2f(x)\\,dx$ equals:",
+      "options": ["$\\frac{(\\log2-5)a+13b/2}{a^2-b^2}$", "$\\frac{(\\log2-5)a+7b/2}{a^2-b^2}$", "$\\frac{(5-\\log2)a+7b/2}{a^2-b^2}$", "None of these"]
+    },
+    {
+      "source_question_number": 30,
+      "source_page": 4,
+      "primary_concept": "fundamental theorem of calculus",
+      "question_archetype": "integral_of_derivative",
+      "stem": "Let $(a,b)$ and $(\\lambda,\\mu)$ be points on $y=f(x)$. If the slope of the tangent at $(x,y)$ is $\\phi(x)$, then $\\int_a^{\\lambda}\\phi(x)\\,dx$ is:",
+      "options": ["$\\lambda-a$", "$\\mu-b$", "$\\lambda+\\mu-a-b$", "None of these"]
+    },
+    {
+      "source_question_number": 31,
+      "source_page": 4,
+      "primary_concept": "integration using derivative",
+      "question_archetype": "derivative_product_integral",
+      "stem": "If $\\frac{d(f(x))}{dx}=g(x)$ for every $x\\in[a,b]$, then $\\int_a^b f(x)g(x)\\,dx$ is equal to:",
+      "options": ["$g(b)+f(a)$", "$g(b)-g(a)$", "$\\frac{f^2(b)-f^2(a)}2$", "$\\frac{g^2(b)-g^2(a)}2$"]
+    },
+    {
+      "source_question_number": 32,
+      "source_page": 4,
+      "primary_concept": "inverse trigonometric integral",
+      "question_archetype": "solve_upper_limit_from_integral",
+      "stem": "If $\\int_{\\ell}^{x}\\frac{dt}{|t|\\sqrt{t^2-1}}=\\frac{\\pi}{6}$, then $x$ can be equal to:",
+      "options": ["$\\frac2{\\sqrt3}$", "$\\sqrt3$", "$2$", "None of these"]
+    },
+    {
+      "source_question_number": 33,
+      "source_page": 4,
+      "primary_concept": "definite integral using symmetry",
+      "question_archetype": "symmetry_about_midpoint",
+      "stem": "$\\int_{50}^{100}\\frac{\\ln x}{\\ln x+\\ln(150-x)}\\,dx$ is equal to:",
+      "options": ["$\\frac{\\pi}{4}$", "$\\frac{\\pi}{2}$", "$25$", "$50$"]
+    },
+    {
+      "source_question_number": 34,
+      "source_page": 4,
+      "primary_concept": "change of variable in definite integral",
+      "question_archetype": "inverse_trigonometric_substitution",
+      "stem": "$\\int_0^{\\ell}\\frac{\\tan^{-1}x}{x}\\,dx$ is equal to:",
+      "options": ["$\\int_0^{\\pi/2}\\frac{\\sin x}{x}\\,dx$", "$\\int_0^{\\pi/2}\\frac{x}{\\sin x}\\,dx$", "$\\frac12\\int_0^{\\pi/2}\\frac{\\sin x}{x}\\,dx$", "$\\frac12\\int_0^{\\pi/2}\\frac{x}{\\sin x}\\,dx$"]
+    },
+    {
+      "source_question_number": 35,
+      "source_page": 4,
+      "primary_concept": "periodic functions in definite integrals",
+      "question_archetype": "integral_function_shift",
+      "stem": "If $g(x)=\\int_0^x\\cos^4t\\,dt$, then $g(x+\\pi)=$",
+      "options": ["$g(x)+g(\\pi)$", "$g(x)-g(\\pi)$", "$g(x)g(\\pi)$", "$\\frac{g(x)}{g(\\pi)}$"]
+    },
+    {
+      "source_question_number": 36,
+      "source_page": 5,
+      "primary_concept": "symmetry of definite integrals",
+      "question_archetype": "functional_symmetry_integral",
+      "stem": "$f(x)$ and $g(x)$ are continuous on $[0,a]$, with $f(x)=f(a-x)$ and $g(x)+g(a-x)=a$. Then $\\int_0^a f(x)g(x)\\,dx$ is equal to:",
+      "options": ["$\\frac a2$", "$\\frac a2\\int_0^a f(x)\\,dx$", "$\\int_0^a f(x)\\,dx$", "$a\\int_0^a f(x)\\,dx$"]
+    },
+    {
+      "source_question_number": 37,
+      "source_page": 5,
+      "primary_concept": "trigonometric definite integral",
+      "question_archetype": "absolute_value_trig_integral",
+      "stem": "$\\int_{-\\pi/2}^{\\pi/2}\\sqrt{\\cos x-\\cos^3x}\\,dx$ is equal to:",
+      "options": ["$\\frac34$", "$\\frac43$", "$\\frac32$", "$\\frac23$"]
+    },
+    {
+      "source_question_number": 38,
+      "source_page": 5,
+      "primary_concept": "greatest integer function in integration",
+      "question_archetype": "floor_function_integral",
+      "stem": "$\\int_0^{10\\pi}[\\tan^{-1}x]\\,dx$, where $[\\cdot]$ denotes the greatest integer function, is equal to:",
+      "options": ["$10-\\tan1$", "$10-\\frac\\pi4$", "$10\\pi-\\tan1$", "$10\\pi-\\frac\\pi4$"]
+    },
+    {
+      "source_question_number": 39,
+      "source_page": 5,
+      "primary_concept": "absolute-value trigonometric integral",
+      "question_archetype": "piecewise_trig_integral",
+      "stem": "$\\int_0^{\\pi}|1+2\\cos x|\\,dx$ is equal to:",
+      "options": ["$\\frac\\pi2+2\\sqrt3$", "$\\frac\\pi3+\\sqrt3$", "$\\frac\\pi3+2\\sqrt3$", "None of these"]
+    },
+    {
+      "source_question_number": 40,
+      "source_page": 5,
+      "primary_concept": "definite integral using symmetry",
+      "question_archetype": "exponential_symmetry_integral",
+      "stem": "$\\int_{-\\pi/2}^{\\pi/2}\\frac{\\cos x}{1+e^x}\\,dx$ is equal to:",
+      "options": ["$1$", "$2$", "$-1$", "$-2$"]
+    },
+    {
+      "source_question_number": 41,
+      "source_page": 5,
+      "primary_concept": "greatest integer function in integration",
+      "question_archetype": "floor_function_trig_integral",
+      "stem": "$\\int_0^{2\\pi}([|\\sin x|]+[|\\cos x|])\\,dx$, where $[\\cdot]$ denotes the greatest integer function, is equal to:",
+      "options": ["$\\pi$", "$2\\pi$", "$\\frac\\pi{\\sqrt2}$", "$\\pi\\sqrt2$"]
+    },
+    {
+      "source_question_number": 42,
+      "source_page": 5,
+      "primary_concept": "greatest integer function in integration",
+      "question_archetype": "floor_function_integral",
+      "stem": "$\\int_0^x[\\cos t]\\,dt$, where $x\\in(2n\\pi,(4n+1)\\pi+\\pi/2)$, $n\\in\\mathbb N$, and $[\\cdot]$ denotes the greatest integer function, is equal to:",
+      "options": ["$-n\\pi$", "$-(n+1)\\pi$", "$-2n\\pi$", "$-(2n+1)\\pi$"]
+    },
+    {
+      "source_question_number": 43,
+      "source_page": 5,
+      "primary_concept": "greatest integer function in integration",
+      "question_archetype": "floor_function_integral",
+      "stem": "$\\int_0^x[\\sin t]\\,dt$, where $x\\in(2n\\pi,(4n+1)\\pi)$, $n\\in\\mathbb N$, and $[\\cdot]$ denotes the greatest integer function, is equal to:",
+      "options": ["$-n\\pi$", "$-(n+1)\\pi$", "$-2n\\pi$", "$-(2n+1)\\pi$"]
+    },
+    {
+      "source_question_number": 44,
+      "source_page": 5,
+      "primary_concept": "fundamental theorem of calculus",
+      "question_archetype": "derivative_of_composite_integral_function",
+      "stem": "If $f(x)=e^{g(x)}$ and $g(x)=\\int_2^x\\frac{t\\,dt}{1+t^4}$, then $f'(2)$ is equal to:",
+      "options": ["$0$", "$\\frac1{17}$", "$\\frac3{17}$", "$\\frac2{17}$"]
+    },
+    {
+      "source_question_number": 45,
+      "source_page": 6,
+      "primary_concept": "algebraic simplification in definite integral",
+      "question_archetype": "radical_rational_integral",
+      "stem": "$\\int_{-1/2}^{1/2}\\sqrt{\\left(\\frac{x+1}{x-1}\\right)^2+\\left(\\frac{x-1}{x+1}\\right)^2-2}\\,dx$ is equal to:",
+      "options": ["$4\\ln\\left(\\frac23\\right)$", "$2\\ln\\left(\\frac23\\right)$", "$\\ln\\left(\\frac43\\right)$", "$4\\ln\\left(\\frac43\\right)$"]
+    },
+    {
+      "source_question_number": 46,
+      "source_page": 6,
+      "primary_concept": "substitution in definite integral",
+      "question_archetype": "exponential_radical_integral",
+      "stem": "$\\int_1^4e^{\\sqrt{x}}\\,dx=$",
+      "options": ["$e^2$", "$e$", "$2e$", "$2e^2$"]
+    },
+    {
+      "source_question_number": 47,
+      "source_page": 6,
+      "primary_concept": "substitution in definite integral",
+      "question_archetype": "exponential_radical_integral",
+      "stem": "$\\int_{\\log2}^{\\log4}\\frac{dx}{\\sqrt{e^x-1}}=$",
+      "options": ["$\\frac\\pi6$", "$\\frac\\pi4$", "$\\frac\\pi2$", "None of these"]
+    },
+    {
+      "source_question_number": 48,
+      "source_page": 6,
+      "primary_concept": "integration by parts",
+      "question_archetype": "function_value_from_integral_identity",
+      "stem": "If $f(\\pi)=2$ and $\\int_0^{\\pi}(f(x)+f''(x))\\sin x\\,dx=5$, then $f(0)$ is equal to. It is given that $f(x)$ is continuous on $[0,\\pi]$.",
+      "options": ["$7$", "$3$", "$5$", "$1$"]
+    },
+    {
+      "source_question_number": 49,
+      "source_page": 6,
+      "primary_concept": "quadrature identity",
+      "question_archetype": "coefficient_from_integral_formula",
+      "stem": "If $f(x)=x^3$ and $\\int_a^bf(x)\\,dx=\\frac{b-a}{6}\\left[f(a)+f(b)+kf\\left(\\frac{a+b}{2}\\right)\\right]$, then $k=$",
+      "options": ["$0$", "$2$", "$4$", "None of these"]
+    },
+    {
+      "source_question_number": 50,
+      "source_page": 6,
+      "primary_concept": "integration by parts",
+      "question_archetype": "relate_definite_integrals",
+      "stem": "If $\\int_0^1\\frac{e^t}{1+t}\\,dt=a$, then $\\int_0^1\\frac{e^t}{(1+t)^2}\\,dt$ is equal to:",
+      "options": ["$a-1+\\frac e2$", "$a+1-\\frac e2$", "$a-1-\\frac e2$", "$a+1+\\frac e2$"]
+    }
+  ]
+}
