@@ -1,0 +1,41 @@
+:root {
+  --sidebar: #151617;
+  --sidebar-active: #2c2c2e;
+  --ink: #111113;
+  --muted: #6e6e73;
+  --line: #e5e5e7;
+  --line-strong: #d2d2d7;
+  --surface: #ffffff;
+  --canvas: #f5f5f7;
+  --surface-subtle: #fafafa;
+  --accent: #ae2c00;
+  --accent-hover: #8f2400;
+  --accent-soft: #fff0eb;
+  --success: #277653;
+  --success-soft: #edf7f1;
+  --warning: #9a6200;
+  --warning-soft: #fff7df;
+  --danger: #b42318;
+  --danger-soft: #fff1f0;
+  --focus: 0 0 0 3px rgba(174, 44, 0, .18);
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, .05);
+  --shadow: 0 14px 40px rgba(0, 0, 0, .12);
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", sans-serif;
+  color: var(--ink);
+  background: var(--canvas);
+}
+
+* { box-sizing: border-box; }
+html, body { min-height: 100%; }
+body { margin: 0; min-width: 320px; background: var(--canvas); }
+button, input, textarea, select { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+a { color: inherit; text-decoration: none; }
+:where(button, input, textarea, select, a):focus-visible { outline: none; box-shadow: var(--focus); }
+.mathContent { font-family: "Times New Roman", Times, serif; line-height: 1.55; }
+.mathContent .katex { font-size: 1.02em; }
+.mathContent .katex-display { margin: .45em 0; overflow-x: auto; overflow-y: hidden; }
+.toastRegion { position: fixed; right: 20px; bottom: 20px; display: grid; gap: 8px; z-index: 100; }
+.toast { max-width: 380px; border-radius: 10px; background: #1d1d1f; color: white; padding: 12px 15px; box-shadow: var(--shadow); font-size: 13px; }
+.toastError { background: var(--danger); }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

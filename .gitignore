@@ -9,3 +9,4 @@ output/
 tmp/
 node_modules/
 .next/
+*.tsbuildinfo

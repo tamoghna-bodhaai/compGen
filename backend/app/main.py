@@ -1,7 +1,4 @@
-from pathlib import Path
-
 from fastapi import FastAPI
-from fastapi.staticfiles import StaticFiles
 
 from app.api.branding import router as branding_router
 from app.api.generation import router as generation_router
@@ -32,10 +29,3 @@ def startup() -> None:
 @app.get("/api/health", tags=["health"])
 def health() -> dict[str, str]:
     return {"status": "ok"}
-
-
-# Keep the teacher workspace dependency-free: FastAPI serves this small static
-# application in development and production alike. Mount it last so /api and
-# /docs keep their normal routes.
-FRONTEND_DIR = Path(__file__).resolve().parents[2] / "frontend"
-app.mount("/", StaticFiles(directory=FRONTEND_DIR, html=True), name="frontend")

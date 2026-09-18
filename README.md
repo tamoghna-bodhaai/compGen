@@ -19,6 +19,8 @@ The source paper is titled *Test on Definite Integrals*. Its questions are impor
 
 ## Local setup
 
+Start FastAPI on port 8000:
+
 ```bash
 cd backend
 uv sync
@@ -26,11 +28,19 @@ uv run python ../scripts/seed_database.py
 uv run fastapi dev app/main.py
 ```
 
-Open `http://127.0.0.1:8000/` for the teacher-facing paper editor, or `http://127.0.0.1:8000/docs` for API documentation.
+In a second terminal, start the Next.js workspace on port 3000:
 
-## Browser editor
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-The built-in, dependency-free editor is served by FastAPI from `frontend/`. It lets a teacher:
+Open `http://127.0.0.1:3000/` for Paper Studio. FastAPI documentation remains at `http://127.0.0.1:8000/docs`. The Next.js server proxies relative `/api/*` calls to FastAPI; set `BACKEND_URL` in `frontend/.env.local` only when the backend uses another address.
+
+## Paper Studio frontend
+
+The TypeScript Next.js application in `frontend/` lets a teacher:
 
 - create a medium-difficulty JEE Definite Integrals draft;
 - browse seed availability through the same exam, subject, chapter, topic, and subtopic taxonomy used by paper creation;
@@ -74,8 +84,23 @@ Run the seed script repeatedly; it upserts by a stable source key and does not d
 
 1. Add a reviewer flow to verify answers and attach solutions to the imported questions.
 2. Add embedding generation to supplement the present metadata-first lexical-semantic fallback.
-3. Build the browser editor and connect its preview to the export endpoint.
-4. Add reviewer workflows for answer verification and solutions.
+3. Add reviewer workflows for answer verification and solutions.
+
+## Frontend verification
+
+```bash
+cd frontend
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
+
+From the repository root, run backend and cross-runtime contracts with:
+
+```bash
+PYTHONPATH=backend backend/.venv/bin/python -m unittest discover -s tests -v
+```
 
 ## Generation endpoint
 
